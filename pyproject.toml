@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "talent-ranker"
+version = "0.1.0"
+description = "Auditable hybrid retrieval and reranking for candidate resumes"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "google-api-python-client>=2.150,<3",
+  "google-auth>=2.36,<3",
+  "google-auth-oauthlib>=1.2,<2",
+  "numpy>=1.26,<3",
+  "pydantic>=2.7,<3",
+  "pypdf>=5,<6",
+  "psycopg[binary,pool]>=3.2,<4",
+  "python-multipart>=0.0.20,<1",
+  "sentence-transformers>=3.3,<4",
+  "uvicorn[standard]>=0.32,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "ruff>=0.8,<1"]
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[project.scripts]
+talent-ranker = "talent_ranker.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

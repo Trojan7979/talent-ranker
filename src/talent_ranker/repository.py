@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+import json
+from typing import Sequence
+
+from .documents import Chunk
+
+
+def _vector(values: Sequence[float]) -> str:
+    return "[" + ",".join(f"{float(v):.8f}" for v in values) + "]"
+
+
+class PostgresRepository:
+    def __init__(self, database_url: str):
+        import psycopg
+
+        self.conn = psycopg.connect(database_url)
+
+    def close(self) -> None:
+        self.conn.close()
+
+    def upsert_candidate(
+        self,
+        candidate_id: str,
+        source_uri: str,
+        source_sha256: str,
+        raw_text: str,
+        chunks: Sequence[Chunk],
+        embeddings: Sequence[Sequence[float]],
+        metadata: dict | None = None,
+    ) -> None:
+        with self.conn.transaction(), self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO candidates(candidate_id, source_uri, source_sha256, raw_text, metadata)
+                   VALUES (%s,%s,%s,%s,%s::jsonb)
+                   ON CONFLICT(candidate_id) DO UPDATE SET source_uri=excluded.source_uri,
+                     source_sha256=excluded.source_sha256, raw_text=excluded.raw_text,
+                     metadata=excluded.metadata, deleted_at=NULL""",
+                (candidate_id, source_uri, source_sha256, raw_text, json.dumps(metadata or {})),
+            )
+            cur.execute("DELETE FROM resume_chunks WHERE candidate_id=%s", (candidate_id,))
+            cur.executemany(
+                """INSERT INTO resume_chunks(candidate_id,ordinal,section,content,embedding)
+                   VALUES (%s,%s,%s,%s,%s::vector)""",
+                [
+                    (candidate_id, c.ordinal, c.section, c.content, _vector(e))
+                    for c, e in zip(chunks, embeddings, strict=True)
+                ],
+            )
+
+    def retrieve(
+        self, jd: str, embedding: Sequence[float], limit: int
+    ) -> tuple[list[str], list[str], dict]:
+        """Return candidate-level dense/lexical ranks plus their strongest chunks."""
+        query = "plainto_tsquery('english', %s)"
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """WITH nearest_chunks AS (
+                       SELECT candidate_id, content, 1-(embedding <=> %s::vector) similarity
+                       FROM resume_chunks
+                       ORDER BY embedding <=> %s::vector LIMIT %s
+                   ), best_per_candidate AS (
+                       SELECT DISTINCT ON (candidate_id) candidate_id, content, similarity
+                       FROM nearest_chunks ORDER BY candidate_id, similarity DESC
+                   )
+                   SELECT candidate_id, content, similarity FROM best_per_candidate
+                   ORDER BY similarity DESC LIMIT %s""",
+                (_vector(embedding), _vector(embedding), limit * 3, limit),
+            )
+            dense_rows = sorted(cur.fetchall(), key=lambda row: row[2], reverse=True)[:limit]
+            cur.execute(
+                f"""SELECT candidate_id, content, ts_rank_cd(content_tsv, {query}) score
+                     FROM resume_chunks WHERE content_tsv @@ {query}
+                     ORDER BY score DESC LIMIT %s""",
+                (jd, jd, limit * 3),
+            )
+            lexical_rows = cur.fetchall()
+        lexical_ids, lexical_chunks, seen = [], {}, set()
+        for cid, content, _ in lexical_rows:
+            lexical_chunks.setdefault(cid, []).append(content)
+            if cid not in seen:
+                seen.add(cid)
+                lexical_ids.append(cid)
+            if len(lexical_ids) >= limit:
+                break
+        dense_ids = [row[0] for row in dense_rows]
+        chunks = {row[0]: [row[1]] for row in dense_rows}
+        for cid, values in lexical_chunks.items():
+            chunks.setdefault(cid, []).extend(values[:2])
+        selected_ids = list(set(dense_ids + lexical_ids))
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """SELECT candidate_id, metadata
+                   FROM candidates
+                   WHERE deleted_at IS NULL AND candidate_id = ANY(%s)""",
+                (selected_ids,),
+            )
+            candidate_rows = {row[0]: {"metadata": row[1]} for row in cur.fetchall()}
+        return dense_ids, lexical_ids, {
+            cid: {**candidate_rows[cid], "chunks": chunks.get(cid, [])}
+            for cid in selected_ids
+            if cid in candidate_rows
+        }
+
+    def save_run(self, job_id: str, jd: str, models: dict, config: dict, results: Sequence) -> str:
+        with self.conn.transaction(), self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO ranking_runs(job_id,jd_text,model_versions,scoring_config)
+                   VALUES (%s,%s,%s::jsonb,%s::jsonb) RETURNING run_id""",
+                (job_id, jd, json.dumps(models), json.dumps(config)),
+            )
+            run_id = str(cur.fetchone()[0])
+            cur.executemany(
+                """INSERT INTO ranking_results
+                   (run_id,candidate_id,rank,score,score_components,evidence,reasoning)
+                   VALUES (%s::uuid,%s,%s,%s,%s::jsonb,%s::jsonb,%s)""",
+                [
+                    (
+                        run_id,
+                        r.candidate_id,
+                        rank,
+                        r.score,
+                        json.dumps(r.components),
+                        json.dumps(r.evidence),
+                        r.reasoning,
+                    )
+                    for rank, r in enumerate(results, 1)
+                ],
+            )
+        return run_id
