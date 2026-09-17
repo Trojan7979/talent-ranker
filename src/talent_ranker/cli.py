@@ -9,6 +9,8 @@ from pathlib import Path
 from .batch_ingestion import ingest_drive_folder, write_drive_inventory
 from .config import SETTINGS
 from .pipeline import RankingPipeline
+from .privacy_audit import audit_privacy
+from .repository import PostgresRepository
 from .storage import GoogleDriveStore
 
 
@@ -64,6 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
     rank.add_argument("--jd", type=Path, required=True)
     rank.add_argument("--output", type=Path, default=Path("ranking.csv"))
     rank.add_argument("--top-k", type=int, default=100)
+    audit = sub.add_parser("privacy-audit", help="Scan stored text for supported contact PII")
+    audit.add_argument("--fail-on-findings", action="store_true")
     return parser
 
 
@@ -82,6 +86,23 @@ def run_drive_inventory(folder_id: str, output: Path) -> None:
     files = drive_store().list_pdfs(folder_id)
     write_drive_inventory(files, output)
     print(f"saved {len(files)} PDFs to {output}")
+
+
+def run_privacy_audit(fail_on_findings: bool) -> None:
+    repository = PostgresRepository(SETTINGS.database_url)
+    try:
+        report = audit_privacy(repository.iter_privacy_texts())
+    finally:
+        repository.close()
+    print(
+        f"privacy audit: {report.finding_count} findings across "
+        f"{report.affected_candidates} candidates"
+    )
+    for issue in report.issues:
+        types = ",".join(issue.pii_types)
+        print(f"{issue.candidate_id} {issue.field}: {issue.finding_count} ({types})")
+    if fail_on_findings and report.finding_count:
+        raise SystemExit(1)
 
 
 def run_pipeline_command(args: argparse.Namespace) -> None:
@@ -135,6 +156,9 @@ def main() -> None:
     args = build_parser().parse_args()
     if args.command == "drive-inventory":
         run_drive_inventory(args.folder_id, args.output)
+        return
+    if args.command == "privacy-audit":
+        run_privacy_audit(args.fail_on_findings)
         return
     run_pipeline_command(args)
 

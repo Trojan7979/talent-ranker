@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
 from .documents import Chunk
 
@@ -18,6 +18,30 @@ class PostgresRepository:
 
     def close(self) -> None:
         self.conn.close()
+
+    def iter_privacy_texts(self) -> Iterator[tuple[str, str, str]]:
+        """Stream auditable text fields without loading the database into memory."""
+        query = """SELECT candidate_id, field, content
+                   FROM (
+                     SELECT candidate_id, 'candidates.raw_text' field, raw_text content
+                     FROM candidates
+                     UNION ALL
+                     SELECT candidate_id, 'resume_chunks.content', content
+                     FROM resume_chunks
+                     UNION ALL
+                     SELECT candidate_id, 'resume_chunks.parent_content', parent_content
+                     FROM resume_chunks
+                     UNION ALL
+                     SELECT candidate_id, 'ranking_results.evidence', evidence::text
+                     FROM ranking_results
+                     UNION ALL
+                     SELECT candidate_id, 'ranking_results.reasoning', reasoning
+                     FROM ranking_results
+                   ) privacy_texts
+                   ORDER BY candidate_id, field"""
+        with self.conn.cursor(name="privacy_audit") as cur:
+            cur.execute(query)
+            yield from cur
 
     def upsert_candidate(
         self,
