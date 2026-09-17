@@ -5,6 +5,8 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from .privacy import redact_pii
+
 
 @dataclass
 class RetrievedCandidate:
@@ -91,12 +93,12 @@ def final_score(rrf: float, reranker_logit: float, metadata: dict) -> tuple[floa
 def evidence_snippet(text: str, jd_terms: set[str], limit: int = 220) -> str:
     sentences = re.split(r"(?<=[.!?])\s+", text)
     best = max(sentences, key=lambda s: len(set(re.findall(r"[a-z0-9]+", s.lower())) & jd_terms))
-    return best[:limit].strip()
+    return redact_pii(best)[:limit].strip()
 
 
 def build_reasoning(evidence: list[str], concerns: list[str], score: float) -> str:
     fact = evidence[0] if evidence else "Resume evidence matched the role requirements."
-    fact = fact.rstrip(".") + "."
+    fact = redact_pii(fact).rstrip(".") + "."
     if concerns:
         return f"{fact} Concern: {concerns[0]}."
     if score >= 0.75:
