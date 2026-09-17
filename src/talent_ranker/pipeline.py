@@ -24,14 +24,17 @@ class RankingPipeline:
         self.repo = PostgresRepository(settings.database_url)
 
     def ingest_pdf(
-        self, candidate_id: str, path: Path, source_uri: str | None = None,
+        self,
+        candidate_id: str,
+        path: Path,
+        source_uri: str | None = None,
         metadata: dict | None = None,
     ) -> None:
         candidate_id = validate_candidate_id(candidate_id)
         data = path.read_bytes()
         text = extract_pdf(path)
-        chunks = chunk_resume(text)
-        vectors = self.encoder.encode([f"{c.section}: {c.content}" for c in chunks])
+        chunks = chunk_resume(text, self.encoder.tokenize, self.encoder.decode)
+        vectors = self.encoder.encode([chunk.embedding_text() for chunk in chunks])
         self.repo.upsert_candidate(
             candidate_id,
             source_uri or path.resolve().as_uri(),
@@ -44,7 +47,9 @@ class RankingPipeline:
 
     def rank(self, job_id: str, jd: str, top_k: int = 100) -> tuple[str, list[RankedCandidate]]:
         query_vector = self.encoder.encode([jd], query=True)[0]
-        dense, lexical, records = self.repo.retrieve(jd, query_vector, self.settings.retrieval_limit)
+        dense, lexical, records = self.repo.retrieve(
+            jd, query_vector, self.settings.retrieval_limit
+        )
         fused = reciprocal_rank_fusion(dense, lexical, self.settings.rrf_k)
         shortlist = sorted(fused, key=lambda cid: (-fused[cid], cid))[: self.settings.rerank_limit]
         documents = ["\n".join(records[cid]["chunks"])[:5000] for cid in shortlist]

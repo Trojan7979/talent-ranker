@@ -100,6 +100,11 @@ button:disabled {
   color: #b42318;
 }
 
+.hint {
+  color: #62708a;
+  font-size: 13px;
+}
+
 @media (max-width: 800px) {
   .workspace {
     grid-template-columns: 1fr;

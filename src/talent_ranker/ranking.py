@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import math
 import re
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -51,10 +51,13 @@ def quality_multiplier(metadata: dict) -> tuple[float, list[str]]:
     signals = source_platform_signals(metadata)
     years = metadata.get("years_experience")
     claimed_skill_months = metadata.get("max_claimed_skill_months")
-    if years is not None and claimed_skill_months is not None:
-        if claimed_skill_months > years * 12 + 18:
-            multiplier *= 0.35
-            concerns.append("skill duration conflicts with stated career length")
+    if (
+        years is not None
+        and claimed_skill_months is not None
+        and claimed_skill_months > years * 12 + 18
+    ):
+        multiplier *= 0.35
+        concerns.append("skill duration conflicts with stated career length")
     if metadata.get("timeline_overlap_months", 0) > 24:
         multiplier *= 0.55
         concerns.append("career timeline needs verification")
@@ -74,11 +77,15 @@ def final_score(rrf: float, reranker_logit: float, metadata: dict) -> tuple[floa
     fit = 0.72 * semantic + 0.28 * retrieval
     multiplier, concerns = quality_multiplier(metadata)
     score = fit * multiplier
-    return score, {
-        "semantic": round(semantic, 6),
-        "retrieval": round(retrieval, 6),
-        "quality_multiplier": round(multiplier, 6),
-    }, concerns
+    return (
+        score,
+        {
+            "semantic": round(semantic, 6),
+            "retrieval": round(retrieval, 6),
+            "quality_multiplier": round(multiplier, 6),
+        },
+        concerns,
+    )
 
 
 def evidence_snippet(text: str, jd_terms: set[str], limit: int = 220) -> str:

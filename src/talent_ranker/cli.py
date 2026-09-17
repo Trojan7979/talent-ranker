@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
+from .batch_ingestion import ingest_drive_folder, write_drive_inventory
 from .config import SETTINGS
 from .pipeline import RankingPipeline
+from .storage import GoogleDriveStore
 
 
 def write_outputs(results, output: Path) -> None:
@@ -39,7 +41,7 @@ def write_outputs(results, output: Path) -> None:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="talent-ranker")
     sub = parser.add_subparsers(dest="command", required=True)
     ingest = sub.add_parser("ingest", help="Extract, chunk, embed and index a resume PDF")
@@ -51,39 +53,90 @@ def main() -> None:
     ingest_drive.add_argument("candidate_id")
     ingest_drive.add_argument("file_id")
     ingest_drive.add_argument("--metadata", type=Path, help="ATS/platform metadata JSON")
+    inventory = sub.add_parser("drive-inventory", help="Export PDFs in a Drive folder to CSV")
+    inventory.add_argument("folder_id")
+    inventory.add_argument("--output", type=Path, default=Path("drive_inventory.csv"))
+    batch = sub.add_parser("ingest-drive-folder", help="Index mapped PDFs from a Drive folder")
+    batch.add_argument("folder_id")
+    batch.add_argument("--manifest", type=Path, required=True)
     rank = sub.add_parser("rank", help="Rank indexed candidates for a job description")
     rank.add_argument("--job-id", required=True)
     rank.add_argument("--jd", type=Path, required=True)
     rank.add_argument("--output", type=Path, default=Path("ranking.csv"))
     rank.add_argument("--top-k", type=int, default=100)
-    args = parser.parse_args()
+    return parser
+
+
+def drive_store() -> GoogleDriveStore:
+    return GoogleDriveStore(
+        Path(SETTINGS.google_credentials_file),
+        Path(SETTINGS.google_token_file),
+    )
+
+
+def read_metadata(path: Path | None) -> dict | None:
+    return json.loads(path.read_text(encoding="utf-8")) if path else None
+
+
+def run_drive_inventory(folder_id: str, output: Path) -> None:
+    files = drive_store().list_pdfs(folder_id)
+    write_drive_inventory(files, output)
+    print(f"saved {len(files)} PDFs to {output}")
+
+
+def run_pipeline_command(args: argparse.Namespace) -> None:
     pipeline = RankingPipeline(SETTINGS)
     try:
-        metadata = (
-            json.loads(args.metadata.read_text(encoding="utf-8"))
-            if getattr(args, "metadata", None)
-            else None
-        )
         if args.command == "ingest":
-            pipeline.ingest_pdf(args.candidate_id, args.pdf, args.source_uri, metadata)
+            pipeline.ingest_pdf(
+                args.candidate_id,
+                args.pdf,
+                args.source_uri,
+                read_metadata(args.metadata),
+            )
         elif args.command == "ingest-drive":
-            from .storage import GoogleDriveStore
-
             with tempfile.TemporaryDirectory(prefix="talent-ranker-ingest-") as directory:
                 local = Path(directory) / "resume.pdf"
-                store = GoogleDriveStore(
-                    Path(SETTINGS.google_credentials_file), Path(SETTINGS.google_token_file)
+                drive_store().download(args.file_id, local)
+                pipeline.ingest_pdf(
+                    args.candidate_id,
+                    local,
+                    f"gdrive://{args.file_id}",
+                    read_metadata(args.metadata),
                 )
-                store.download(args.file_id, local)
-                pipeline.ingest_pdf(args.candidate_id, local, f"gdrive://{args.file_id}", metadata)
+        elif args.command == "ingest-drive-folder":
+            report = ingest_drive_folder(
+                pipeline,
+                drive_store(),
+                args.folder_id,
+                args.manifest,
+                print,
+            )
+            print(
+                f"complete: {report.indexed} indexed, {len(report.failures)} failed, "
+                f"{report.skipped} unmapped"
+            )
+            if report.failures:
+                print("\n".join(report.failures))
+                raise SystemExit(1)
         else:
             run_id, results = pipeline.rank(
-                args.job_id, args.jd.read_text(encoding="utf-8"), args.top_k
+                args.job_id,
+                args.jd.read_text(encoding="utf-8"),
+                args.top_k,
             )
             write_outputs(results, args.output)
             print(f"saved run {run_id}: {args.output} and {args.output.with_suffix('.jsonl')}")
     finally:
         pipeline.repo.close()
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    if args.command == "drive-inventory":
+        run_drive_inventory(args.folder_id, args.output)
+        return
+    run_pipeline_command(args)
 
 
 if __name__ == "__main__":

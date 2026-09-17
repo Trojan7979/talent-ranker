@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS resume_chunks (
     chunk_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     candidate_id text NOT NULL REFERENCES candidates(candidate_id) ON DELETE CASCADE,
     ordinal integer NOT NULL,
+    parent_ordinal integer NOT NULL,
     section text NOT NULL,
     content text NOT NULL,
+    parent_content text NOT NULL,
+    chunk_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
     content_tsv tsvector GENERATED ALWAYS AS
       (to_tsvector('english', coalesce(section, '') || ' ' || content)) STORED,
     embedding vector(384) NOT NULL,

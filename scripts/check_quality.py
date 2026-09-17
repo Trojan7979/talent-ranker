@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {"__pycache__", ".git", ".pytest_cache", ".venv", "node_modules", "dist"}
 LINE_LIMIT_EXEMPT = {".json", ".jsonl", ".md", ".docx", ".csv"}
@@ -39,7 +38,7 @@ def iter_files() -> list[Path]:
 def check_trailing_whitespace(path: Path, lines: list[str]) -> list[str]:
     errors = []
     for index, line in enumerate(lines, 1):
-        body = line[:-1] if line.endswith("\n") else line
+        body = line.removesuffix("\n")
         if body.rstrip(" \t") != body:
             errors.append(f"{path}:{index}: trailing whitespace")
     return errors

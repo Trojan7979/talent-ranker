@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
-
 DRIVE_READONLY_SCOPE = ["https://www.googleapis.com/auth/drive.readonly"]
+
+
+@dataclass(frozen=True)
+class DriveFile:
+    file_id: str
+    name: str
+    modified_time: str = ""
+    md5_checksum: str = ""
+    size: int | None = None
 
 
 class GoogleDriveStore:
@@ -23,7 +32,41 @@ class GoogleDriveStore:
             downloader = MediaIoBaseDownload(handle, request)
             done = False
             while not done:
-                _, done = downloader.next_chunk()
+                _, done = downloader.next_chunk(num_retries=3)
+
+    def list_pdfs(self, folder_id: str) -> list[DriveFile]:
+        escaped_folder_id = folder_id.replace("'", "\\'")
+        query = (
+            f"'{escaped_folder_id}' in parents and trashed = false and mimeType = 'application/pdf'"
+        )
+        files: list[DriveFile] = []
+        page_token = None
+        while True:
+            response = (
+                self.client.files()
+                .list(
+                    q=query,
+                    fields="nextPageToken,files(id,name,modifiedTime,md5Checksum,size)",
+                    pageSize=1000,
+                    pageToken=page_token,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute(num_retries=3)
+            )
+            files.extend(
+                DriveFile(
+                    file_id=item["id"],
+                    name=item["name"],
+                    modified_time=item.get("modifiedTime", ""),
+                    md5_checksum=item.get("md5Checksum", ""),
+                    size=int(item["size"]) if item.get("size") else None,
+                )
+                for item in response.get("files", [])
+            )
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                return sorted(files, key=lambda item: (item.name.lower(), item.file_id))
 
     def _build_client(self):
         from googleapiclient.discovery import build
@@ -36,6 +79,10 @@ class GoogleDriveStore:
         from google.oauth2.credentials import Credentials
         from google_auth_oauthlib.flow import InstalledAppFlow
 
+        if not self.credentials_file.is_file():
+            raise FileNotFoundError(
+                f"Google OAuth client file not found: {self.credentials_file.resolve()}"
+            )
         credentials = None
         if self.token_file.exists():
             credentials = Credentials.from_authorized_user_file(

@@ -1,24 +1,28 @@
-from dataclasses import dataclass
-import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-@dataclass(frozen=True)
-class Settings:
-    database_url: str = os.getenv(
-        "TALENT_RANKER_DATABASE_URL",
-        "postgresql://talent_ranker:talent-ranker-local-only@localhost:5432/talent_ranker",
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="TALENT_RANKER_",
+        extra="ignore",
     )
-    embedding_model: str = os.getenv(
-        "TALENT_RANKER_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"
+
+    database_url: str = (
+        "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker"
     )
-    reranker_model: str = os.getenv("TALENT_RANKER_RERANKER_MODEL", "BAAI/bge-reranker-base")
-    retrieval_limit: int = int(os.getenv("TALENT_RANKER_RETRIEVAL_LIMIT", "300"))
-    rerank_limit: int = int(os.getenv("TALENT_RANKER_RERANK_LIMIT", "100"))
-    rrf_k: int = int(os.getenv("TALENT_RANKER_RRF_K", "60"))
-    google_credentials_file: str = os.getenv(
-        "TALENT_RANKER_GOOGLE_CREDENTIALS_FILE", "secrets/google-client.json"
-    )
-    google_token_file: str = os.getenv("TALENT_RANKER_GOOGLE_TOKEN_FILE", ".tokens/drive.json")
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    reranker_model: str = "BAAI/bge-reranker-base"
+    retrieval_limit: int = 300
+    rerank_limit: int = 100
+    rrf_k: int = 60
+    google_credentials_file: str = "secrets/google-client.json"
+    google_token_file: str = ".tokens/drive.json"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 SETTINGS = Settings()

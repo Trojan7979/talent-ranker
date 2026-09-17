@@ -5,6 +5,10 @@ system stores original resumes in private Drive storage, extracts and chunks res
 chunks with Hugging Face models, retrieves candidates with hybrid search, and reranks the shortlist
 with evidence-backed job-fit scoring.
 
+Laid out the initial talent intelligence architecture using semantic search, hybrid
+retrieval, and evidence-backed reranking to shortlist candidates against job requirements through
+job-fit scoring.
+
 ## Local Services
 
 ```powershell
@@ -13,6 +17,8 @@ uv pip install -e ".[dev]"
 docker compose up -d
 talent-ranker ingest CAND_0001 .\resumes\candidate-1.pdf --source-uri gdrive://FILE_ID
 talent-ranker ingest-drive CAND_0002 GOOGLE_DRIVE_FILE_ID --metadata ats.json
+talent-ranker drive-inventory GOOGLE_DRIVE_FOLDER_ID --output drive_inventory.csv
+talent-ranker ingest-drive-folder GOOGLE_DRIVE_FOLDER_ID --manifest drive_inventory.csv
 talent-ranker rank --job-id senior-ai-engineer --jd .\job.txt --output .\ranking.csv
 uvicorn talent_ranker.api:app --reload
 python validate_submission.py .\ranking.csv
@@ -25,6 +31,8 @@ are supported directly; scanned PDFs should be routed through OCR before ingesti
 Use `uv` for the Python environment. It creates a standard `.venv`, respects `.python-version`,
 and avoids accidental installs into the system interpreter. If `uv` is unavailable, use
 `python -m venv .venv` and then install with `.venv\Scripts\python -m pip install -e ".[dev]"`.
+
+For the complete database, model, API, and frontend startup sequence, see `LOCAL_RUNBOOK.md`.
 
 Google Drive ingestion uses a personal OAuth client:
 
@@ -77,9 +85,3 @@ public format can evolve without changing storage relationships.
 The recruiter UI will review ranked results in pages of up to 1,000. Pagination is a presentation
 and API concern; it does not encode a page or batch number in the candidate ID. Production API
 pagination should use a stable ranking cursor rather than loading all 9,000 records in the browser.
-
-## Stand-Up Framing
-
-Update: Laid out the initial talent intelligence architecture using semantic search, hybrid
-retrieval, and evidence-backed reranking to shortlist candidates against job requirements through
-job-fit scoring.

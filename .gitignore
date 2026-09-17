@@ -14,8 +14,13 @@ frontend/node_modules/
 frontend/dist/
 ranking.csv
 ranking.jsonl
+drive_inventory.csv
+resume_manifest.csv
+manifests/
 candidates.jsonl
 resumes/
+jobs/
+outputs/
 data/raw/
 data/processed/
 ~$*.docx

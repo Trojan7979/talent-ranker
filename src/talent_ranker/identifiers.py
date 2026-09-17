@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 CANDIDATE_ID_PATTERN = re.compile(r"^CAND_([0-9]{4})$")
 MIN_CANDIDATE_NUMBER = 1
 MAX_CANDIDATE_NUMBER = 9_000
@@ -12,8 +11,7 @@ def format_candidate_id(candidate_number: int) -> str:
     """Return the stable external ID used by the 9,000-candidate pilot."""
     if not MIN_CANDIDATE_NUMBER <= candidate_number <= MAX_CANDIDATE_NUMBER:
         raise ValueError(
-            f"candidate number must be between {MIN_CANDIDATE_NUMBER} "
-            f"and {MAX_CANDIDATE_NUMBER}"
+            f"candidate number must be between {MIN_CANDIDATE_NUMBER} and {MAX_CANDIDATE_NUMBER}"
         )
     return f"CAND_{candidate_number:04d}"
 

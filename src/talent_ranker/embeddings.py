@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Sequence
+from collections.abc import Sequence
+from functools import cached_property
+
 import numpy as np
 
 
@@ -9,8 +10,7 @@ class HuggingFaceEncoder:
     def __init__(self, model_name: str):
         self.model_name = model_name
 
-    @property
-    @lru_cache(maxsize=1)
+    @cached_property
     def model(self):
         from sentence_transformers import SentenceTransformer
 
@@ -23,13 +23,18 @@ class HuggingFaceEncoder:
             values, batch_size=64, normalize_embeddings=True, show_progress_bar=False
         )
 
+    def tokenize(self, text: str) -> list[int]:
+        return self.model.tokenizer.encode(text, add_special_tokens=False)
+
+    def decode(self, token_ids: list[int]) -> str:
+        return self.model.tokenizer.decode(token_ids, skip_special_tokens=True)
+
 
 class CrossEncoderReranker:
     def __init__(self, model_name: str):
         self.model_name = model_name
 
-    @property
-    @lru_cache(maxsize=1)
+    @cached_property
     def model(self):
         from sentence_transformers import CrossEncoder
 

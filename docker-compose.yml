@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: talent_ranker
       POSTGRES_USER: talent_ranker
-      POSTGRES_PASSWORD: talent-ranker-local-only
+      POSTGRES_PASSWORD: talent-ranker-local
     ports:
       - "5432:5432"
     volumes:

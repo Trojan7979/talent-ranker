@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Sequence
+from collections.abc import Sequence
 
 from .documents import Chunk
 
@@ -40,10 +40,21 @@ class PostgresRepository:
             )
             cur.execute("DELETE FROM resume_chunks WHERE candidate_id=%s", (candidate_id,))
             cur.executemany(
-                """INSERT INTO resume_chunks(candidate_id,ordinal,section,content,embedding)
-                   VALUES (%s,%s,%s,%s,%s::vector)""",
+                """INSERT INTO resume_chunks
+                   (candidate_id,ordinal,parent_ordinal,section,content,parent_content,
+                    chunk_metadata,embedding)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s::vector)""",
                 [
-                    (candidate_id, c.ordinal, c.section, c.content, _vector(e))
+                    (
+                        candidate_id,
+                        c.ordinal,
+                        c.parent_ordinal,
+                        c.section,
+                        c.content,
+                        c.parent_content,
+                        json.dumps(c.metadata),
+                        _vector(e),
+                    )
                     for c, e in zip(chunks, embeddings, strict=True)
                 ],
             )
@@ -56,7 +67,8 @@ class PostgresRepository:
         with self.conn.cursor() as cur:
             cur.execute(
                 """WITH nearest_chunks AS (
-                       SELECT candidate_id, content, 1-(embedding <=> %s::vector) similarity
+                       SELECT candidate_id, parent_content AS content,
+                         1-(embedding <=> %s::vector) similarity
                        FROM resume_chunks
                        ORDER BY embedding <=> %s::vector LIMIT %s
                    ), best_per_candidate AS (
@@ -69,7 +81,7 @@ class PostgresRepository:
             )
             dense_rows = sorted(cur.fetchall(), key=lambda row: row[2], reverse=True)[:limit]
             cur.execute(
-                f"""SELECT candidate_id, content, ts_rank_cd(content_tsv, {query}) score
+                f"""SELECT candidate_id, parent_content, ts_rank_cd(content_tsv, {query}) score
                      FROM resume_chunks WHERE content_tsv @@ {query}
                      ORDER BY score DESC LIMIT %s""",
                 (jd, jd, limit * 3),
@@ -96,11 +108,15 @@ class PostgresRepository:
                 (selected_ids,),
             )
             candidate_rows = {row[0]: {"metadata": row[1]} for row in cur.fetchall()}
-        return dense_ids, lexical_ids, {
-            cid: {**candidate_rows[cid], "chunks": chunks.get(cid, [])}
-            for cid in selected_ids
-            if cid in candidate_rows
-        }
+        return (
+            dense_ids,
+            lexical_ids,
+            {
+                cid: {**candidate_rows[cid], "chunks": chunks.get(cid, [])}
+                for cid in selected_ids
+                if cid in candidate_rows
+            },
+        )
 
     def save_run(self, job_id: str, jd: str, models: dict, config: dict, results: Sequence) -> str:
         with self.conn.transaction(), self.conn.cursor() as cur:
