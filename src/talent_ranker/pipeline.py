@@ -6,6 +6,7 @@ from .config import Settings
 from .documents import chunk_resume, document_hash, extract_pdf
 from .embeddings import CrossEncoderReranker, HuggingFaceEncoder
 from .identifiers import validate_candidate_id
+from .privacy import redact_pii
 from .ranking import (
     RankedCandidate,
     build_reasoning,
@@ -32,14 +33,15 @@ class RankingPipeline:
     ) -> None:
         candidate_id = validate_candidate_id(candidate_id)
         data = path.read_bytes()
-        text = extract_pdf(path)
-        chunks = chunk_resume(text, self.encoder.tokenize, self.encoder.decode)
+        extracted_text = extract_pdf(path)
+        index_text = redact_pii(extracted_text)
+        chunks = chunk_resume(index_text, self.encoder.tokenize, self.encoder.decode)
         vectors = self.encoder.encode([chunk.embedding_text() for chunk in chunks])
         self.repo.upsert_candidate(
             candidate_id,
             source_uri or path.resolve().as_uri(),
             document_hash(data),
-            text,
+            index_text,
             chunks,
             vectors,
             metadata,
