@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .identifiers import validate_candidate_id
-from .storage import DriveFile, GoogleDriveStore
+from .storage import CanonicalObjectStore, DriveFile, GoogleDriveStore, store_canonical_resume
 
 
 class ResumePipeline(Protocol):
@@ -106,6 +106,7 @@ def ingest_drive_folder(
     folder_id: str,
     manifest_path: Path,
     progress: Callable[[str], None] | None = None,
+    canonical_store: CanonicalObjectStore | None = None,
 ) -> BatchReport:
     files = store.list_pdfs(folder_id)
     inventory = {item.file_id: item for item in files}
@@ -130,16 +131,20 @@ def ingest_drive_folder(
                     "source_file_name": item.name,
                     "source_modified_time": item.modified_time,
                     "source_md5_checksum": item.md5_checksum,
+                    "client_source_uri": store.source_uri(item.file_id),
                 }
+                source_uri = store.source_uri(item.file_id)
+                if canonical_store is not None:
+                    source_uri = store_canonical_resume(canonical_store, entry.candidate_id, local)
                 pipeline.ingest_pdf(
                     entry.candidate_id,
                     local,
-                    f"gdrive://{item.file_id}",
+                    source_uri,
                     metadata,
                 )
                 report.indexed += 1
                 progress(f"[{position}/{len(entries)}] indexed {entry.candidate_id}")
-            except Exception as error: # noqa: BLE001 - isolate individual file failures
+            except Exception as error:  # noqa: BLE001 - isolate individual file failures
                 report.failures.append(f"{entry.candidate_id}: {error}")
                 progress(f"[{position}/{len(entries)}] failed {entry.candidate_id}")
     return report

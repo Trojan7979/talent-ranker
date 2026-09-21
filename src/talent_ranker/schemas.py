@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -26,3 +28,15 @@ class CandidateScore(BaseModel):
 class RankResponse(BaseModel):
     run_id: str
     results: list[CandidateScore]
+
+
+class CandidateEvidenceResponse(BaseModel):
+    run_id: str
+    job_id: str
+    candidate_id: str
+    rank: int
+    score: float
+    score_components: dict[str, float]
+    evidence: list[str]
+    reasoning: str
+    created_at: datetime

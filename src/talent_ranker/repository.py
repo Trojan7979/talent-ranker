@@ -142,6 +142,34 @@ class PostgresRepository:
             },
         )
 
+    def get_candidate_evidence(self, run_id: str, candidate_id: str) -> dict | None:
+        """Return the persisted evidence for one candidate in one ranking run."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """SELECT rr.run_id, r.job_id, rr.candidate_id, rr.rank, rr.score,
+                          rr.score_components, rr.evidence, rr.reasoning, r.created_at
+                   FROM ranking_results rr
+                   JOIN ranking_runs r ON r.run_id = rr.run_id
+                   JOIN candidates c ON c.candidate_id = rr.candidate_id
+                   WHERE rr.run_id = %s::uuid AND rr.candidate_id = %s
+                     AND c.deleted_at IS NULL""",
+                (run_id, candidate_id),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "run_id": str(row[0]),
+            "job_id": row[1],
+            "candidate_id": row[2],
+            "rank": row[3],
+            "score": row[4],
+            "score_components": row[5],
+            "evidence": row[6],
+            "reasoning": row[7],
+            "created_at": row[8],
+        }
+
     def save_run(self, job_id: str, jd: str, models: dict, config: dict, results: Sequence) -> str:
         with self.conn.transaction(), self.conn.cursor() as cur:
             cur.execute(

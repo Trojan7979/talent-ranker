@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     google_credentials_file: str = "secrets/google-client.json"
     google_token_file: str = ".tokens/drive.json"
+    canonical_storage_backend: str = "s3"
+    canonical_s3_bucket: str = ""
+    canonical_s3_prefix: str = "talent-ranker"
+    canonical_s3_endpoint_url: str | None = None
+    canonical_local_root: str = ".data/object-storage"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @property

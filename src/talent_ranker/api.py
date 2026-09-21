@@ -2,13 +2,21 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import SETTINGS
+from .identifiers import validate_candidate_id
 from .pipeline import RankingPipeline
-from .schemas import CandidateScore, HealthResponse, RankRequest, RankResponse
+from .schemas import (
+    CandidateEvidenceResponse,
+    CandidateScore,
+    HealthResponse,
+    RankRequest,
+    RankResponse,
+)
 
 
 @asynccontextmanager
@@ -55,3 +63,19 @@ def rank_candidates(request: RankRequest) -> RankResponse:
             for rank, result in enumerate(results, 1)
         ],
     )
+
+
+@app.get(
+    "/ranking-runs/{run_id}/candidates/{candidate_id}/evidence",
+    response_model=CandidateEvidenceResponse,
+    operation_id="get_candidate_evidence",
+)
+def get_candidate_evidence(run_id: UUID, candidate_id: str) -> CandidateEvidenceResponse:
+    try:
+        candidate_id = validate_candidate_id(candidate_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    evidence = app.state.pipeline.repo.get_candidate_evidence(str(run_id), candidate_id)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="candidate evidence not found for ranking run")
+    return CandidateEvidenceResponse.model_validate(evidence)

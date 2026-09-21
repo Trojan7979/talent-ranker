@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
+
+from .identifiers import validate_candidate_id
 
 DRIVE_READONLY_SCOPE = ["https://www.googleapis.com/auth/drive.readonly"]
 
@@ -13,6 +17,80 @@ class DriveFile:
     modified_time: str = ""
     md5_checksum: str = ""
     size: int | None = None
+
+
+class ClientStorageAdapter(Protocol):
+    """A read-only adapter for storage controlled by a client."""
+
+    def download(self, object_id: str, destination: Path) -> None: ...
+
+    def source_uri(self, object_id: str) -> str: ...
+
+
+class CanonicalObjectStore(Protocol):
+    """Durable storage used as the source of truth by the ranking platform."""
+
+    def put_file(self, object_key: str, source: Path, content_type: str) -> str: ...
+
+
+class S3ObjectStore:
+    """Canonical object storage backed by S3 or an S3-compatible service."""
+
+    def __init__(
+        self,
+        bucket: str,
+        prefix: str = "talent-ranker",
+        endpoint_url: str | None = None,
+        client=None,
+    ):
+        if not bucket:
+            raise ValueError("canonical S3 bucket must be configured")
+        if client is None:
+            import boto3
+
+            client = boto3.client("s3", endpoint_url=endpoint_url)
+        self.bucket = bucket
+        self.prefix = prefix.strip("/")
+        self.client = client
+
+    def put_file(self, object_key: str, source: Path, content_type: str) -> str:
+        key = "/".join(part for part in (self.prefix, object_key.lstrip("/")) if part)
+        self.client.upload_file(
+            str(source),
+            self.bucket,
+            key,
+            ExtraArgs={"ContentType": content_type},
+        )
+        return f"s3://{self.bucket}/{key}"
+
+
+class FilesystemObjectStore:
+    """Local canonical store for development and tests."""
+
+    def __init__(self, root: Path):
+        self.root = root.resolve()
+
+    def put_file(self, object_key: str, source: Path, content_type: str) -> str:
+        del content_type
+        destination = (self.root / object_key).resolve()
+        if self.root not in destination.parents:
+            raise ValueError("object key escapes canonical storage root")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source.read_bytes())
+        return destination.as_uri()
+
+
+def store_canonical_resume(
+    store: CanonicalObjectStore,
+    candidate_id: str,
+    source: Path,
+) -> str:
+    """Store an immutable, content-addressed resume and return its canonical URI."""
+    candidate_id = validate_candidate_id(candidate_id)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    suffix = source.suffix.lower() or ".pdf"
+    key = f"candidates/{candidate_id}/{digest}{suffix}"
+    return store.put_file(key, source, "application/pdf")
 
 
 class GoogleDriveStore:
@@ -33,6 +111,9 @@ class GoogleDriveStore:
             done = False
             while not done:
                 _, done = downloader.next_chunk(num_retries=3)
+
+    def source_uri(self, file_id: str) -> str:
+        return f"gdrive://{file_id}"
 
     def list_pdfs(self, folder_id: str) -> list[DriveFile]:
         escaped_folder_id = folder_id.replace("'", "\\'")

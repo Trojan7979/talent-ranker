@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Auditable hybrid retrieval and reranking for candidate resumes"
 requires-python = ">=3.11"
 dependencies = [
+  "boto3>=1.35,<2",
   "fastapi>=0.115,<1",
   "google-api-python-client>=2.150,<3",
   "google-auth>=2.36,<3",

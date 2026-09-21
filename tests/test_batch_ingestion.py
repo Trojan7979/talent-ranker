@@ -5,7 +5,7 @@ from talent_ranker.batch_ingestion import (
     read_manifest,
     write_drive_inventory,
 )
-from talent_ranker.storage import DriveFile
+from talent_ranker.storage import DriveFile, FilesystemObjectStore
 
 
 class FakeDriveStore:
@@ -18,6 +18,9 @@ class FakeDriveStore:
 
     def download(self, file_id: str, destination: Path) -> None:
         destination.write_bytes(f"PDF {file_id}".encode())
+
+    def source_uri(self, file_id: str) -> str:
+        return f"gdrive://{file_id}"
 
 
 class FakePipeline:
@@ -68,3 +71,25 @@ def test_manifest_rejects_duplicate_candidate_ids(tmp_path: Path):
         assert "duplicate candidate ID" in str(error)
     else:
         raise AssertionError("duplicate candidate ID was accepted")
+
+
+def test_drive_batch_routes_resume_through_canonical_storage(tmp_path: Path):
+    files = [DriveFile("file-1", "resume.pdf")]
+    manifest = tmp_path / "manifest.csv"
+    manifest.write_text(
+        "candidate_id,drive_file_id\nCAND_0001,file-1\n",
+        encoding="utf-8",
+    )
+    pipeline = FakePipeline()
+
+    report = ingest_drive_folder(
+        pipeline,
+        FakeDriveStore(files),
+        "folder-1",
+        manifest,
+        canonical_store=FilesystemObjectStore(tmp_path / "canonical"),
+    )
+
+    assert report.indexed == 1
+    assert pipeline.calls[0][2].startswith("file:")
+    assert pipeline.calls[0][3]["client_source_uri"] == "gdrive://file-1"

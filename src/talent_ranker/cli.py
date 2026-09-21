@@ -11,7 +11,13 @@ from .config import SETTINGS
 from .pipeline import RankingPipeline
 from .privacy_audit import audit_privacy
 from .repository import PostgresRepository
-from .storage import GoogleDriveStore
+from .storage import (
+    CanonicalObjectStore,
+    FilesystemObjectStore,
+    GoogleDriveStore,
+    S3ObjectStore,
+    store_canonical_resume,
+)
 
 
 def write_outputs(results, output: Path) -> None:
@@ -78,6 +84,19 @@ def drive_store() -> GoogleDriveStore:
     )
 
 
+def canonical_store() -> CanonicalObjectStore:
+    backend = SETTINGS.canonical_storage_backend.lower()
+    if backend == "s3":
+        return S3ObjectStore(
+            SETTINGS.canonical_s3_bucket,
+            SETTINGS.canonical_s3_prefix,
+            SETTINGS.canonical_s3_endpoint_url,
+        )
+    if backend == "filesystem":
+        return FilesystemObjectStore(Path(SETTINGS.canonical_local_root))
+    raise ValueError(f"unsupported canonical storage backend: {backend}")
+
+
 def read_metadata(path: Path | None) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8")) if path else None
 
@@ -109,21 +128,27 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
     pipeline = RankingPipeline(SETTINGS)
     try:
         if args.command == "ingest":
+            metadata = read_metadata(args.metadata) or {}
+            metadata["client_source_uri"] = args.source_uri or args.pdf.resolve().as_uri()
             pipeline.ingest_pdf(
                 args.candidate_id,
                 args.pdf,
-                args.source_uri,
-                read_metadata(args.metadata),
+                store_canonical_resume(canonical_store(), args.candidate_id, args.pdf),
+                metadata,
             )
         elif args.command == "ingest-drive":
             with tempfile.TemporaryDirectory(prefix="talent-ranker-ingest-") as directory:
                 local = Path(directory) / "resume.pdf"
-                drive_store().download(args.file_id, local)
+                source_store = drive_store()
+                source_store.download(args.file_id, local)
+                source_uri = store_canonical_resume(canonical_store(), args.candidate_id, local)
+                metadata = read_metadata(args.metadata) or {}
+                metadata["client_source_uri"] = source_store.source_uri(args.file_id)
                 pipeline.ingest_pdf(
                     args.candidate_id,
                     local,
-                    f"gdrive://{args.file_id}",
-                    read_metadata(args.metadata),
+                    source_uri,
+                    metadata,
                 )
         elif args.command == "ingest-drive-folder":
             report = ingest_drive_folder(
@@ -132,6 +157,7 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
                 args.folder_id,
                 args.manifest,
                 print,
+                canonical_store(),
             )
             print(
                 f"complete: {report.indexed} indexed, {len(report.failures)} failed, "

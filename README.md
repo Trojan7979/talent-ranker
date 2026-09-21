@@ -1,7 +1,7 @@
 # Talent Ranker
 
 Production-oriented candidate ranking architecture for PDF resumes and job descriptions. The
-system stores original resumes in private Drive storage, extracts and chunks resume text, embeds
+system copies original resumes from client storage into canonical object storage, extracts and chunks resume text, embeds
 chunks with Hugging Face models, retrieves candidates with hybrid search, and reranks the shortlist
 with evidence-backed job-fit scoring.
 
@@ -44,17 +44,36 @@ Google Drive ingestion uses a personal OAuth client:
 ## Architecture
 
 ```text
-Frontend -> FastAPI backend -> Google Drive + Postgres/pgvector
-                              |
-                              v
-                 hybrid retrieval -> reranking -> ranked shortlist
+Client storage adapters (Drive today; S3/Azure/SFTP later)
+                  |
+                  v
+Canonical object storage (S3 by default) -> ingestion/indexing -> Postgres/pgvector
+                                                               |
+Recruiter UI -> FastAPI -> hybrid retrieval -> reranking -> ranked shortlist
+                                      |
+                                      v
+                         get_candidate_evidence
 ```
 
 - `frontend/` contains the React/Vite recruiter-facing shell.
-- `src/talent_ranker/` contains the FastAPI backend, ranking pipeline, storage adapter, and domain
+- `src/talent_ranker/` contains the FastAPI backend, ranking pipeline, storage contracts, and domain
   logic.
 - `db/schema.sql` contains the PostgreSQL and pgvector schema.
 - CSV remains the benchmark handoff format, while JSONL and PostgreSQL keep richer audit data.
+
+`GoogleDriveStore` is a client-storage adapter, not the system of record. Ingestion copies each
+resume to the configured `CanonicalObjectStore`; S3 is the production default and the filesystem
+implementation supports local development. Canonical resume keys are content-addressed so retries
+are idempotent.
+
+The read-only evidence tool is exposed as:
+
+```text
+GET /ranking-runs/{run_id}/candidates/{candidate_id}/evidence
+```
+
+It returns the persisted rank, score components, redacted evidence, reasoning, and job context for
+that exact ranking run.
 
 ## Metadata
 
