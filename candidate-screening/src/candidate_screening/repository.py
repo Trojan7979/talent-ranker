@@ -6,8 +6,11 @@ from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from .campaign_store import CampaignStoreMixin
+from .ranking_read import RankingReadMixin
 
-class PostgresRepository:
+
+class PostgresRepository(CampaignStoreMixin, RankingReadMixin):
     """Own a bounded pool; each use case borrows one connection."""
 
     def __init__(self, database_url: str, *, min_size: int = 1, max_size: int = 10):

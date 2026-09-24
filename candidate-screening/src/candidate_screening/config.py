@@ -17,3 +17,4 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_from_email: str | None = None
+    recruiter_tokens: dict[str, str] = Field(default_factory=dict)
