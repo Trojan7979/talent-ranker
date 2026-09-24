@@ -70,13 +70,15 @@ def client():
                 )
                 cur.execute(
                     """INSERT INTO candidates VALUES
-                       ('CAND_0001',NULL),('CAND_0002',now()),('CAND_0003',NULL)"""
+                       ('CAND_0001',NULL),('CAND_0002',now()),('CAND_0003',NULL),
+                       ('CAND_0004',NULL),('CAND_0005',NULL)"""
                 )
                 cur.execute(
                     """INSERT INTO ranking_results VALUES
                        (%s,'CAND_0001',1,0.9),(%s,'CAND_0002',2,0.8),
-                       (%s,'CAND_0003',3,0.7)""",
-                    (RUN_ID, RUN_ID, RUN_ID),
+                       (%s,'CAND_0003',3,0.7),(%s,'CAND_0004',4,0.6),
+                       (%s,'CAND_0005',5,0.5)""",
+                    (RUN_ID, RUN_ID, RUN_ID, RUN_ID, RUN_ID),
                 )
             app = create_app(
                 repository=TransactionRepository(conn),

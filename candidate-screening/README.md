@@ -33,6 +33,62 @@ Copy `.env.example` for available settings. The default invite lifetime is 48 ho
 Set `SCREENING_PUBLIC_BASE_URL` to the candidate form URL when the frontend is added; for API-only
 testing it points to the invite API. No frontend is included here.
 
+## Four-inbox Gmail sender pilot
+
+One fifth Gmail account sends the four screening links. Two Gmail and two Outlook/Microsoft 365
+accounts are recipients; receiving an email does not require Microsoft Graph or an Outlook API.
+The backend connects directly to the [Gmail API](https://developers.google.com/workspace/gmail/api/guides/sending)
+with the send-only OAuth scope. MCP is not part of delivery.
+
+1. Copy `.env.example` to `.env` in this directory. Set `SCREENING_SENDER_BACKEND=gmail_api` and
+   paste the **fifth sender Gmail address** into `SCREENING_GMAIL_SENDER_EMAIL`. `.env` is ignored
+   by Git. Keep `SCREENING_RECRUITER_TOKENS` set for the local recruiter API.
+2. In Google Cloud, enable the Gmail API, configure the OAuth consent screen, and create a
+   **Desktop app** OAuth client. For a personal Gmail test sender, configure an external audience
+   and add that fifth account as a test user if the consent screen is in testing. Download the
+   client JSON to `secrets/gmail-desktop-client.json` under this directory. The `secrets/` folder
+   is ignored by Git. See the [official Python setup guide](https://developers.google.com/workspace/gmail/api/quickstart/python).
+3. Install the optional sender dependencies and authorize locally. Sign into the **fifth Gmail
+   account** in the browser consent window. Only the
+   [`gmail.send` scope](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send)
+   is requested. The resulting refresh token is saved to `.tokens/gmail-sender.json`, also ignored
+   by Git.
+
+   ```powershell
+   uv pip install -e ".[dev,gmail]"
+   candidate-screening authorize-gmail
+   ```
+
+4. Copy `examples/pilot-contacts.example.json` to `secrets/pilot-contacts.json`. Replace its four
+   example addresses with the **two recipient Gmail and two recipient Outlook addresses**, and
+   replace the candidate IDs with four active candidates from the same persisted ranking run.
+   Outlook/Microsoft 365 work or personal addresses can appear in this recipient list. The
+   `provider` field labels the pilot mix; the sending worker does not route by recipient provider.
+5. Start the API. Load the four addresses through its protected contact endpoint. The loader
+   previews candidate IDs and provider labels by default; `--apply` writes the contacts and sends
+   no email. Set the client bearer token to one of the keys in `SCREENING_RECRUITER_TOKENS`.
+
+   ```powershell
+   $env:SCREENING_RECRUITER_TOKEN = "local-dev-token"
+   python scripts/load_pilot_contacts.py --file secrets/pilot-contacts.json
+   python scripts/load_pilot_contacts.py --file secrets/pilot-contacts.json --apply
+   ```
+
+6. Preview one ranking run, propose a campaign, edit its final candidate IDs to those exact four,
+   and approve it as the recruiter. Before approval, set `SCREENING_PUBLIC_BASE_URL` to the
+   reachable screening URL used in invite links. The default `localhost` URL only works on the
+   machine running the API; a real inbox test across devices needs a reachable HTTPS host or
+   development tunnel. Only then run the Gmail worker for that campaign:
+
+   ```powershell
+   candidate-screening dispatch --once --campaign-id CAMPAIGN_UUID --limit 4
+   ```
+
+   Gmail dispatch requires `--campaign-id` so this pilot cannot pick up another campaign's queued
+   mail. The command reports provider acceptance counts; check the four inboxes for receipt. With
+   no frontend yet, the links open the candidate API's JSON response. Candidate answer submission
+   can be exercised through the API until the UI is wired.
+
 ## Mock data and checks
 
 The Postgres tests create a uniquely named test schema, minimal upstream candidates/job/ranking

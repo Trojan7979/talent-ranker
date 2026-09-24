@@ -1,0 +1,6 @@
+[
+  {"candidate_id": "CAND_0001", "provider": "gmail", "email": "first@gmail.invalid"},
+  {"candidate_id": "CAND_0003", "provider": "gmail", "email": "second@gmail.invalid"},
+  {"candidate_id": "CAND_0004", "provider": "outlook", "email": "first@outlook.invalid"},
+  {"candidate_id": "CAND_0005", "provider": "outlook", "email": "second@outlook.invalid"}
+]
