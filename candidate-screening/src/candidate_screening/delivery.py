@@ -1,4 +1,5 @@
 import smtplib
+from uuid import UUID
 
 from .email import EmailSender
 
@@ -8,9 +9,9 @@ class InitialInviteDispatcher:
         self.repo = repository
         self.sender = sender
 
-    def run_once(self, limit: int = 100) -> dict[str, int]:
+    def run_once(self, limit: int = 100, campaign_id: UUID | None = None) -> dict[str, int]:
         counts = {"sent": 0, "failed": 0, "cancelled": 0}
-        for message in self.repo.claim_due(limit):
+        for message in self.repo.claim_due(limit, campaign_id=campaign_id):
             if not self.repo.delivery_still_valid(message["id"]):
                 self.repo.cancel_delivery(message["id"])
                 counts["cancelled"] += 1

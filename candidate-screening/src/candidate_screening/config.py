@@ -1,9 +1,11 @@
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SCREENING_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="SCREENING_", env_file=".env", extra="ignore")
 
     database_url: str = (
         "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker"
@@ -17,4 +19,7 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_from_email: str | None = None
+    gmail_sender_email: str | None = None
+    gmail_client_secrets_file: Path | None = None
+    gmail_token_file: Path = Path(".tokens/gmail-sender.json")
     recruiter_tokens: dict[str, str] = Field(default_factory=dict)

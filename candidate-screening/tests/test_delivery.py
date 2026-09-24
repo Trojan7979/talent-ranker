@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 from conftest import RUN_ID, headers, make_config
 
@@ -86,3 +88,44 @@ def test_expired_or_deleted_candidate_is_not_dispatched(client):
     sender = FakeEmailSender()
     assert InitialInviteDispatcher(client.app.state.repo, sender).run_once()["sent"] == 0
     assert sender.sent == []
+
+
+@pytest.mark.integration
+def test_dispatch_can_be_limited_to_one_approved_campaign(client):
+    first_id = approved_campaign(client)
+    with client.app.state.repo.connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id FROM screening_job_configs WHERE job_id='job-1'")
+        config_id = cur.fetchone()["id"]
+    second = client.post(
+        "/screening/campaigns",
+        headers=headers(),
+        json={
+            "job_id": "job-1",
+            "ranking_run_id": str(RUN_ID),
+            "config_id": str(config_id),
+            "rule": {"kind": "top_n", "value": 2},
+            "message_template": "Second {screening_link}",
+        },
+    )
+    assert second.status_code == 201
+    second_id = second.json()["id"]
+    assert (
+        client.post(
+            f"/screening/campaigns/{second_id}/approve",
+            headers=headers(),
+            json={"expected_revision": 1},
+        ).status_code
+        == 200
+    )
+    sender = FakeEmailSender()
+    dispatcher = InitialInviteDispatcher(client.app.state.repo, sender)
+    assert dispatcher.run_once(campaign_id=UUID(first_id))["sent"] == 2
+    assert len(sender.sent) == 2
+    with client.app.state.repo.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT count(*) AS count FROM screening_delivery_outbox o
+               JOIN screening_invites i ON i.id=o.invite_id
+               WHERE i.campaign_id=%s AND o.status='pending'""",
+            (second_id,),
+        )
+        assert cur.fetchone()["count"] == 2

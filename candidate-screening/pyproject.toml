@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["httpx2>=2.13,<3", "pytest>=8,<9", "ruff>=0.8,<1"]
+gmail = ["google-auth>=2.36,<3", "google-auth-oauthlib>=1.2,<2", "requests>=2.31,<3"]
 
 [project.scripts]
 candidate-screening = "candidate_screening.cli:main"

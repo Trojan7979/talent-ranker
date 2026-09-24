@@ -5,7 +5,11 @@ from uuid import UUID
 
 class DeliveryStoreMixin:
     def claim_due(
-        self, limit: int, lease_seconds: int = 60, max_attempts: int = 5
+        self,
+        limit: int,
+        lease_seconds: int = 60,
+        max_attempts: int = 5,
+        campaign_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         now = datetime.now(UTC)
         with self.connection() as conn, conn.transaction(), conn.cursor() as cur:
@@ -15,12 +19,13 @@ class DeliveryStoreMixin:
                    JOIN candidates c ON c.candidate_id=i.candidate_id
                    JOIN screening_contacts sc ON sc.candidate_id=c.candidate_id
                    WHERE o.attempts < %s AND i.status IS NULL AND i.expires_at > %s
+                     AND (%s::uuid IS NULL OR i.campaign_id=%s::uuid)
                      AND c.deleted_at IS NULL AND sc.contactable
                      AND ((o.status IN ('pending','failed') AND o.next_attempt_at <= %s)
                        OR (o.status='processing' AND o.leased_until <= %s))
                    ORDER BY o.next_attempt_at,o.id LIMIT %s
                    FOR UPDATE OF o SKIP LOCKED""",
-                (max_attempts, now, now, now, limit),
+                (max_attempts, now, campaign_id, campaign_id, now, now, limit),
             )
             ids = [row["id"] for row in cur.fetchall()]
             if not ids:
