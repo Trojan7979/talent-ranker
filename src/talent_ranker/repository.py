@@ -19,7 +19,8 @@ class PostgresRepository(
     def __init__(self, database_url: str):
         import psycopg
 
-        self.conn = psycopg.connect(database_url)
+        # Reads must not leave an outer transaction open around later writes.
+        self.conn = psycopg.connect(database_url, autocommit=True)
 
     def close(self) -> None:
         self.conn.close()
