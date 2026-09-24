@@ -18,7 +18,7 @@ uv pip install -e ".[dev]"
 $env:SCREENING_DATABASE_URL = "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker"
 $env:SCREENING_RECRUITER_TOKENS = '{"local-dev-token":"local-recruiter"}'
 psql $env:SCREENING_DATABASE_URL -f db/schema.sql
-uvicorn candidate_screening.api:app --port 8001
+candidate-screening-api --reload
 ```
 
 The ranking database must already contain `candidates`, `jobs`, `job_profile_versions`,
@@ -30,6 +30,8 @@ it with the organization's authenticated recruiter principal. Candidate routes u
 token. Keep API access logs from recording token-bearing URLs.
 
 Copy `.env.example` for available settings. The default invite lifetime is 48 hours from approval.
+`SCREENING_API_PORT` defaults to 8001; set it in `.env` to change the listening port when using
+`candidate-screening-api`. From this directory, `uv run candidate-screening-api --reload` also works.
 Set `SCREENING_PUBLIC_BASE_URL` to the candidate form URL when the frontend is added; for API-only
 testing it points to the invite API. No frontend is included here.
 

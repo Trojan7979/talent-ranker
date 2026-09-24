@@ -54,7 +54,7 @@ In terminal B, from `candidate-screening`:
 $env:SCREENING_DATABASE_URL = "postgresql://talent_ranker:talent-ranker-local@localhost:5432/screening_mock"
 $env:SCREENING_SENDER_BACKEND = "fake"
 $env:SCREENING_RECRUITER_TOKENS = '{"mock-token":"mock-recruiter"}'
-.\.venv\Scripts\python.exe -m uvicorn candidate_screening.api:app --host 127.0.0.1 --port 8001
+.\.venv\Scripts\candidate-screening-api.exe --reload
 ```
 
 Back in terminal C at the repository root, set request variables and check both

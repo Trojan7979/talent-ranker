@@ -21,6 +21,7 @@ gmail = ["google-auth>=2.36,<3", "google-auth-oauthlib>=1.2,<2", "requests>=2.31
 
 [project.scripts]
 candidate-screening = "candidate_screening.cli:main"
+candidate-screening-api = "candidate_screening.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

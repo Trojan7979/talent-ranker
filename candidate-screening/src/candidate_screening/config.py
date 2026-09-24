@@ -11,6 +11,7 @@ class Settings(BaseSettings):
         "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker"
     )
     public_base_url: str = "http://localhost:8001/screening/invites"
+    api_port: int = Field(default=8001, ge=1, le=65535)
     invite_expiry_hours: int = Field(default=48, ge=1, le=720)
     max_campaign_size: int = Field(default=1000, ge=1, le=10000)
     sender_backend: str = "fake"
