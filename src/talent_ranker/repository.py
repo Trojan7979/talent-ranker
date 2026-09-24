@@ -6,13 +6,16 @@ from collections.abc import Iterator, Sequence
 from .candidate_chunks import CandidateChunksRepositoryMixin
 from .documents import Chunk
 from .job_profiles import JobProfileRepositoryMixin
+from .saved_runs import SavedRunsRepositoryMixin
 
 
 def _vector(values: Sequence[float]) -> str:
     return "[" + ",".join(f"{float(v):.8f}" for v in values) + "]"
 
 
-class PostgresRepository(CandidateChunksRepositoryMixin, JobProfileRepositoryMixin):
+class PostgresRepository(
+    CandidateChunksRepositoryMixin, JobProfileRepositoryMixin, SavedRunsRepositoryMixin
+):
     def __init__(self, database_url: str):
         import psycopg
 

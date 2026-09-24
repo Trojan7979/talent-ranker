@@ -122,6 +122,16 @@ class RankResponse(BaseModel):
     results: list[CandidateScore]
 
 
+class SavedRunPage(BaseModel):
+    run_id: UUID
+    job_id: str
+    job_profile_version_id: UUID | None
+    created_at: datetime
+    total_count: int
+    items: list[CandidateScore]
+    next_after_rank: int | None
+
+
 class CandidateEvidenceResponse(BaseModel):
     run_id: str
     job_id: str

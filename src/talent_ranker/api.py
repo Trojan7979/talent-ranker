@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .calibration import calibrate_job_description, configured_extractor
@@ -21,6 +21,7 @@ from .schemas import (
     JobProfileResponse,
     RankRequest,
     RankResponse,
+    SavedRunPage,
     UpdateJobProfileRequest,
 )
 
@@ -147,6 +148,22 @@ def approve_job_profile(
     if profile is None:
         raise HTTPException(status_code=409, detail="job profile is no longer approvable")
     return JobProfileResponse.model_validate(profile)
+
+
+@app.get(
+    "/ranking-runs/{run_id}",
+    response_model=SavedRunPage,
+    operation_id="get_saved_ranking_run",
+)
+def get_saved_ranking_run(
+    run_id: UUID,
+    after_rank: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> SavedRunPage:
+    page = app.state.pipeline.repo.get_saved_run(str(run_id), after_rank, limit)
+    if page is None:
+        raise HTTPException(status_code=404, detail="ranking run not found")
+    return SavedRunPage.model_validate(page)
 
 
 @app.get(

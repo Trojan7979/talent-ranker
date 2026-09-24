@@ -77,6 +77,10 @@ GET /ranking-runs/{run_id}/candidates/{candidate_id}/evidence
 It returns the persisted rank, score components, redacted evidence, reasoning, and job context for
 that exact ranking run.
 
+`GET /ranking-runs/{run_id}?after_rank=0&limit=50` returns a saved shortlist page, its pinned
+job/profile IDs, total eligible count, and `next_after_rank` for the next page. The screening
+frontend uses this to recover the same ranking run after a reload without reranking.
+
 Job descriptions are calibrated before ranking. `POST /jobs/calibrate` creates an editable draft;
 `PUT /job-profiles/{profile_version_id}` saves recruiter changes, and
 `POST /job-profiles/{profile_version_id}/approve` freezes the approved version. `POST /rank`
