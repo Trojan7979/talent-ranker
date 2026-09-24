@@ -44,7 +44,8 @@ def client():
                 cur.execute("CREATE TABLE jobs (job_id text PRIMARY KEY)")
                 cur.execute(
                     """CREATE TABLE job_profile_versions
-                       (profile_version_id uuid PRIMARY KEY, job_id text, status text)"""
+                       (profile_version_id uuid PRIMARY KEY, job_id text, status text,
+                        priorities jsonb NOT NULL)"""
                 )
                 cur.execute(
                     """CREATE TABLE ranking_runs
@@ -58,7 +59,9 @@ def client():
                 cur.execute(migration.read_text(encoding="utf-8"))
                 cur.execute("INSERT INTO jobs VALUES ('job-1')")
                 cur.execute(
-                    "INSERT INTO job_profile_versions VALUES (%s,'job-1','approved')", (PROFILE_ID,)
+                    """INSERT INTO job_profile_versions VALUES
+                       (%s,'job-1','approved','{"must_have_skills":["Python"]}')""",
+                    (PROFILE_ID,),
                 )
                 cur.execute(
                     """INSERT INTO ranking_runs(run_id,job_id,job_profile_version_id)

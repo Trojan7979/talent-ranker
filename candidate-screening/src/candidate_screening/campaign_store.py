@@ -4,7 +4,7 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 
 from .campaigns import CreateCampaignRequest, EditCampaignRequest
-from .questions import JobQuestions
+from .questions import JobQuestions, validate_against_approved_profile
 
 _CAMPAIGN_COLUMNS = """id,job_id,ranking_run_id,job_profile_version_id,config_id,
     selection_rule,proposed_candidate_ids,final_candidate_ids,message_template,
@@ -16,6 +16,15 @@ class CampaignStoreMixin:
         self, job_id: str, profile_id: UUID, questions: JobQuestions, actor: str
     ) -> dict[str, Any] | None:
         with self.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """SELECT priorities FROM job_profile_versions
+                   WHERE job_id=%s AND profile_version_id=%s AND status='approved'""",
+                (job_id, profile_id),
+            )
+            profile = cur.fetchone()
+            if profile is None:
+                return None
+            validate_against_approved_profile(questions, profile["priorities"])
             cur.execute(
                 """INSERT INTO screening_job_configs
                    (job_id,job_profile_version_id,version,questions,created_by)

@@ -100,3 +100,19 @@ def test_selector_boundaries_and_invalid_membership(client):
         },
     )
     assert invalid.status_code == 409
+
+
+@pytest.mark.integration
+def test_screening_questions_must_cover_approved_must_haves(client):
+    from conftest import PROFILE_ID
+
+    response = client.post(
+        "/screening/jobs/job-1/configs",
+        headers=headers(),
+        json={
+            "job_profile_version_id": str(PROFILE_ID),
+            "questions": {"version": 1, "must_haves": [{"id": "java", "text": "Java"}]},
+        },
+    )
+    assert response.status_code == 409
+    assert "approved hiring criteria" in response.json()["detail"]

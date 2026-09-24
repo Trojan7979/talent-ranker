@@ -65,7 +65,7 @@ def summarize(config: JobQuestions, answers: ScreeningAnswers, today: date) -> S
         verification.append("availability")
         reasons.append("AVAILABILITY_UNCERTAIN")
     else:
-        confirmed.append("candidate_reported:availability")
+        confirmed.append(f"candidate_reported:availability:{availability.earliest_start_date}")
         if config.target_start_date and availability.earliest_start_date > config.target_start_date:
             verification.append("availability_after_target")
             reasons.append("AVAILABILITY_AFTER_TARGET")
@@ -79,7 +79,7 @@ def summarize(config: JobQuestions, answers: ScreeningAnswers, today: date) -> S
         verification.append("notice_period")
         reasons.append("NOTICE_UNCERTAIN")
     else:
-        confirmed.append("candidate_reported:notice_period")
+        confirmed.append(f"candidate_reported:notice_period_days:{notice.days}")
         if config.max_notice_days is not None and notice.days > config.max_notice_days:
             verification.append("notice_exceeds_limit")
             reasons.append("NOTICE_EXCEEDS_LIMIT")
@@ -102,7 +102,10 @@ def summarize(config: JobQuestions, answers: ScreeningAnswers, today: date) -> S
         verification.append("salary")
         reasons.append("SALARY_UNCERTAIN")
     else:
-        confirmed.append("candidate_reported:salary_expectation")
+        confirmed.append(
+            f"candidate_reported:salary_expectation:{salary.minimum}-{salary.maximum} "
+            f"{salary.currency}/{salary.period}"
+        )
         if config.salary_maximum is not None:
             if salary.currency != config.salary_currency or salary.period != config.salary_period:
                 verification.append("salary_not_comparable")

@@ -49,6 +49,8 @@ def create_config(job_id: str, details: CreateJobConfigRequest, actor: Actor, re
         )
     except UniqueViolation as error:
         raise HTTPException(status_code=409, detail="configuration version exists") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     if result is None:
         raise HTTPException(status_code=409, detail="approved job profile not found")
     return result

@@ -1,8 +1,19 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
+
+
+def _valid_template(value: str) -> str:
+    if value.count("{screening_link}") != 1:
+        raise ValueError("message template needs exactly one {screening_link}")
+    return value
+
+
+ScreeningTemplate = Annotated[
+    str, Field(min_length=1, max_length=20000), AfterValidator(_valid_template)
+]
 
 from .questions import JobQuestions
 from .selection import SelectionRule
@@ -42,14 +53,14 @@ class CreateCampaignRequest(BaseModel):
     ranking_run_id: UUID
     config_id: UUID
     rule: SelectionRule
-    message_template: str = Field(min_length=1, max_length=20000)
+    message_template: ScreeningTemplate
     expiry_hours: int = Field(default=48, ge=1, le=720)
 
 
 class EditCampaignRequest(BaseModel):
     expected_revision: int = Field(ge=1)
     final_candidate_ids: list[str] = Field(min_length=1, max_length=1000)
-    message_template: str = Field(min_length=1, max_length=20000)
+    message_template: ScreeningTemplate
 
 
 class ApproveCampaignRequest(BaseModel):

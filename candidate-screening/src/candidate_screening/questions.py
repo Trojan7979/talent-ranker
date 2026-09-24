@@ -105,3 +105,16 @@ class ScreeningAnswers(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("qualification requirement IDs must be unique")
         return self
+
+
+def validate_against_approved_profile(config: JobQuestions, priorities: dict) -> None:
+    """Every approved must-have needs one configured confirmation question."""
+    approved = {
+        item.strip().casefold()
+        for field in ("must_have_skills", "must_have_requirements")
+        for item in priorities.get(field, [])
+        if item.strip()
+    }
+    configured = {item.text.strip().casefold() for item in config.must_haves}
+    if configured != approved:
+        raise ValueError("screening must-haves must match approved hiring criteria")

@@ -96,3 +96,23 @@ def test_decline_is_terminal_and_has_no_completion_summary(client):
     with client.app.state.repo.connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT count(*) AS count FROM screening_summary")
         assert cur.fetchone()["count"] == 0
+
+
+@pytest.mark.integration
+def test_sweep_expires_overdue_started_invite(client):
+    _, token = sent_invite(client)
+    base = f"/screening/invites/{token}"
+    assert client.post(base + "/started").status_code == 200
+    with client.app.state.repo.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE screening_invites SET expires_at=now()-interval '1 second' WHERE token=%s",
+            (token,),
+        )
+    assert client.app.state.repo.expire_due() == 1
+    assert client.app.state.repo.expire_due() == 0
+    assert (
+        client.post(
+            base + "/complete", json={"expected_revision": 0, "answers": complete_answers()}
+        ).status_code
+        == 410
+    )
