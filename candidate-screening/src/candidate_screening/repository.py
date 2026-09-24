@@ -8,10 +8,13 @@ from psycopg_pool import ConnectionPool
 
 from .approval_store import ApprovalStoreMixin
 from .campaign_store import CampaignStoreMixin
+from .delivery_store import DeliveryStoreMixin
 from .ranking_read import RankingReadMixin
 
 
-class PostgresRepository(ApprovalStoreMixin, CampaignStoreMixin, RankingReadMixin):
+class PostgresRepository(
+    ApprovalStoreMixin, CampaignStoreMixin, DeliveryStoreMixin, RankingReadMixin
+):
     """Own a bounded pool; each use case borrows one connection."""
 
     def __init__(self, database_url: str, *, min_size: int = 1, max_size: int = 10):
