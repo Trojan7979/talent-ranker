@@ -102,6 +102,18 @@ export const screeningApi = {
     request<ReviewPage>(`/campaigns/${id}/results`, { headers: recruiter(token) }),
   getActivity: (id: string, token: string) =>
     request<ActivityPage>(`/campaigns/${id}/invites?limit=200`, { headers: recruiter(token) }),
+  exportResults: async (id: string, candidateIds: string[], token: string): Promise<Blob> => {
+    const response = await fetch(`/api/screening/campaigns/${id}/exports`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...recruiter(token) },
+      body: JSON.stringify({ candidate_ids: candidateIds }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(typeof body?.detail === "string" ? body.detail : `Export failed: HTTP ${response.status}`);
+    }
+    return response.blob();
+  },
   getInvite: (token: string) => request<Invite>(`/invites/${encodeURIComponent(token)}`),
   event: (token: string, event: "opened" | "started" | "decline") =>
     request<Invite>(`/invites/${encodeURIComponent(token)}/${event}`, { method: "POST" }),

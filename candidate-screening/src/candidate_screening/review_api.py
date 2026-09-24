@@ -1,13 +1,31 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from .auth import recruiter_actor
+from .export import ExportRequest, build_workbook
 from .review import ActivityPage, CompletedScreening, ReviewPage, ReviewQuery
 
 router = APIRouter(prefix="/screening", tags=["recruiter review"])
 Actor = Annotated[str, Depends(recruiter_actor)]
+
+
+@router.post("/campaigns/{campaign_id}/exports")
+def export_campaign_results(
+    campaign_id: UUID, details: ExportRequest, actor: Actor, request: Request
+) -> Response:
+    try:
+        rows = request.app.state.repo.export_completed(campaign_id, details.candidate_ids)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if rows is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return Response(
+        content=build_workbook(rows),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="screening-{campaign_id}.xlsx"'},
+    )
 
 
 @router.get("/campaigns/{campaign_id}/invites", response_model=ActivityPage)

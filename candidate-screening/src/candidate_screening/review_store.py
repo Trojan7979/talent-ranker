@@ -5,6 +5,30 @@ from .review import ReviewQuery, decode_cursor, encode_cursor
 
 
 class ReviewStoreMixin:
+    def export_completed(self, campaign_id: UUID, candidate_ids: list[str]) -> list[dict] | None:
+        with self.connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM screening_campaigns WHERE id=%s", (campaign_id,))
+            if cur.fetchone() is None:
+                return None
+            cur.execute(
+                """SELECT i.candidate_id,o.recipient_email,i.status,s.outcome,
+                          s.confirmed,s.missing,s.needs_verification,r.interest,
+                          r.earliest_start_date,r.notice_days,r.salary_minimum,
+                          r.salary_maximum,r.salary_currency,r.salary_period,
+                          r.salary_negotiable,i.completed_at
+                   FROM screening_invites i
+                   JOIN screening_summary s ON s.invite_id=i.id
+                   JOIN screening_responses r ON r.invite_id=i.id
+                   JOIN screening_delivery_outbox o ON o.invite_id=i.id
+                   WHERE i.campaign_id=%s AND i.candidate_id=ANY(%s)
+                   ORDER BY i.candidate_id""",
+                (campaign_id, candidate_ids),
+            )
+            rows = cur.fetchall()
+        if {row["candidate_id"] for row in rows} != set(candidate_ids):
+            raise ValueError("selected candidates must have completed this campaign")
+        return rows
+
     def list_invites(self, campaign_id: UUID, after: str | None, limit: int) -> dict | None:
         with self.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT 1 FROM screening_campaigns WHERE id=%s", (campaign_id,))
