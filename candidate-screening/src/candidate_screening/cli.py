@@ -11,9 +11,14 @@ def main() -> None:
     parser.add_argument("command", choices=["dispatch", "expire"])
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
-    if args.command != "dispatch":
-        parser.error("expiry sweep is not available until its implementation step")
     settings = Settings()
+    if args.command == "expire":
+        repo = PostgresRepository(settings.database_url)
+        try:
+            print({"expired": repo.expire_due()})
+        finally:
+            repo.close()
+        return
     if settings.sender_backend == "fake":
         sender = FakeEmailSender()
     elif settings.sender_backend == "smtp":

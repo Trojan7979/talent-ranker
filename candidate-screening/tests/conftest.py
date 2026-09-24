@@ -100,3 +100,41 @@ def make_config(client):
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
+
+
+def sent_invite(client):
+    from candidate_screening.delivery import InitialInviteDispatcher
+    from candidate_screening.email import FakeEmailSender
+
+    config_id = make_config(client)
+    contact = client.put(
+        "/screening/candidates/CAND_0001/contact",
+        headers=headers(),
+        json={"email": "candidate@example.test", "source": "ats"},
+    )
+    assert contact.status_code == 200
+    proposal = client.post(
+        "/screening/campaigns",
+        headers=headers(),
+        json={
+            "job_id": "job-1",
+            "ranking_run_id": str(RUN_ID),
+            "config_id": config_id,
+            "rule": {"kind": "top_n", "value": 1},
+            "message_template": "Hello {screening_link}",
+        },
+    )
+    assert proposal.status_code == 201, proposal.text
+    campaign_id = proposal.json()["id"]
+    approval = client.post(
+        f"/screening/campaigns/{campaign_id}/approve",
+        headers=headers(),
+        json={"expected_revision": 1},
+    )
+    assert approval.status_code == 200, approval.text
+    sender = FakeEmailSender()
+    assert InitialInviteDispatcher(client.app.state.repo, sender).run_once()["sent"] == 1
+    with client.app.state.repo.connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT token FROM screening_invites WHERE campaign_id=%s", (campaign_id,))
+        token = cur.fetchone()["token"]
+    return campaign_id, token

@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS screening_responses (
     salary_currency char(3),
     salary_period text CHECK (salary_period IN ('hour', 'month', 'year')),
     salary_negotiable boolean NOT NULL DEFAULT false,
+    answer_fingerprint text CHECK (answer_fingerprint ~ '^[0-9a-f]{64}$'),
     revision integer NOT NULL DEFAULT 1 CHECK (revision > 0),
     saved_at timestamptz NOT NULL DEFAULT now(),
     submitted_at timestamptz,
