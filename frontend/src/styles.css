@@ -199,6 +199,13 @@ button:disabled {
 .inline-check { display: flex; align-items: start; gap: 10px; }
 .inline-check input { width: auto; margin-top: 3px; }
 
+.candidate-page { min-height: 100vh; padding: 40px 16px; background: #f3f6fb; }
+.candidate-shell { max-width: 640px; margin: 0 auto; display: grid; gap: 16px; }
+.candidate-shell h1 { margin: 0; }
+.eyebrow { color: #2458d3; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+.question-fields { display: grid; gap: 18px; }
+.wizard-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+
 @media (max-width: 800px) {
   .workspace {
     grid-template-columns: 1fr;
