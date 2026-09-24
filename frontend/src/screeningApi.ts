@@ -28,6 +28,23 @@ export type ReviewPage = {
   next_cursor: string | null;
 };
 
+export type ActivityPage = {
+  campaign_id: string;
+  items: {
+    invite_id: string;
+    candidate_id: string;
+    recipient_email: string;
+    delivery_status: "pending" | "processing" | "sent" | "failed" | "cancelled";
+    status: Invite["status"];
+    sent_at: string | null;
+    opened_at: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    expires_at: string;
+  }[];
+  next_cursor: string | null;
+};
+
 export type Invite = {
   id: string;
   campaign_id: string;
@@ -83,6 +100,8 @@ export const screeningApi = {
     }),
   getResults: (id: string, token: string) =>
     request<ReviewPage>(`/campaigns/${id}/results`, { headers: recruiter(token) }),
+  getActivity: (id: string, token: string) =>
+    request<ActivityPage>(`/campaigns/${id}/invites?limit=200`, { headers: recruiter(token) }),
   getInvite: (token: string) => request<Invite>(`/invites/${encodeURIComponent(token)}`),
   event: (token: string, event: "opened" | "started" | "decline") =>
     request<Invite>(`/invites/${encodeURIComponent(token)}/${event}`, { method: "POST" }),

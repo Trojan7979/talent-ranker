@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { screeningApi } from "./screeningApi";
-import type { Campaign, ReviewPage } from "./screeningApi";
+import type { ActivityPage, Campaign, ReviewPage } from "./screeningApi";
 
 const outcomeLabel = {
   proceed_to_interview: "Screening passed",
@@ -15,6 +15,7 @@ export function CampaignPage() {
   const [activeToken, setActiveToken] = useState("");
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [results, setResults] = useState<ReviewPage | null>(null);
+  const [activity, setActivity] = useState<ActivityPage | null>(null);
   const [verifiedUrl, setVerifiedUrl] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,12 +23,14 @@ export function CampaignPage() {
 
   const refresh = useCallback(async (auth: string) => {
     if (!campaignId) return;
-    const [current, completed] = await Promise.all([
+    const [current, completed, roster] = await Promise.all([
       screeningApi.getCampaign(campaignId, auth),
       screeningApi.getResults(campaignId, auth),
+      screeningApi.getActivity(campaignId, auth),
     ]);
     setCampaign(current);
     setResults(completed);
+    setActivity(roster);
     setLastUpdated(new Date());
     setError(null);
   }, [campaignId]);
@@ -115,6 +118,24 @@ export function CampaignPage() {
               </div>
             )}
             {campaign.status === "approved" && <p role="status">Batch approved. Invitations are queued for backend dispatch.</p>}
+          </section>
+          <section className="screening-panel">
+            <h2>Invitation activity</h2>
+            <p className="hint">Queued means approved but not yet accepted by the email provider. Sent means provider accepted the message.</p>
+            <div className="shortlist-grid">
+              {activity?.items.map((item) => (
+                <article className="result-card" key={item.invite_id}>
+                  <div><h3>{item.candidate_id}</h3><span>{item.recipient_email}</span></div>
+                  <strong>{item.status ?? "Queued"}</strong>
+                  <p>Delivery: {item.delivery_status}</p>
+                  {item.opened_at && <p>Opened: {new Date(item.opened_at).toLocaleString()}</p>}
+                  {item.started_at && <p>Started: {new Date(item.started_at).toLocaleString()}</p>}
+                  {item.completed_at && <p>Completed: {new Date(item.completed_at).toLocaleString()}</p>}
+                </article>
+              ))}
+            </div>
+            {activity?.items.length === 0 && <p>No invitations have been queued yet.</p>}
+            {activity?.next_cursor && <p className="hint">Showing the first 200 invitations.</p>}
           </section>
           <section className="screening-panel">
             <h2>Completed screenings</h2>

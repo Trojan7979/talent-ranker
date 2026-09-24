@@ -39,6 +39,25 @@ class ReviewPage(BaseModel):
     next_cursor: str | None = None
 
 
+class InviteActivity(BaseModel):
+    invite_id: UUID
+    candidate_id: str
+    recipient_email: str
+    delivery_status: Literal["pending", "processing", "sent", "failed", "cancelled"]
+    status: Literal["sent", "opened", "started", "completed", "expired", "declined"] | None
+    sent_at: datetime | None
+    opened_at: datetime | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    expires_at: datetime
+
+
+class ActivityPage(BaseModel):
+    campaign_id: UUID
+    items: list[InviteActivity]
+    next_cursor: str | None
+
+
 class ReviewQuery(BaseModel):
     outcome: Outcome | None = None
     sort_by: SortBy = "outcome"

@@ -5,6 +5,29 @@ from .review import ReviewQuery, decode_cursor, encode_cursor
 
 
 class ReviewStoreMixin:
+    def list_invites(self, campaign_id: UUID, after: str | None, limit: int) -> dict | None:
+        with self.connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM screening_campaigns WHERE id=%s", (campaign_id,))
+            if cur.fetchone() is None:
+                return None
+            cur.execute(
+                """SELECT i.id AS invite_id,i.candidate_id,o.recipient_email,
+                          o.status AS delivery_status,i.status,i.sent_at,i.opened_at,
+                          i.started_at,i.completed_at,i.expires_at
+                   FROM screening_invites i
+                   JOIN screening_delivery_outbox o ON o.invite_id=i.id
+                   WHERE i.campaign_id=%s AND (%s::text IS NULL OR i.candidate_id>%s)
+                   ORDER BY i.candidate_id LIMIT %s""",
+                (campaign_id, after, after, limit + 1),
+            )
+            rows = cur.fetchall()
+        items = rows[:limit]
+        return {
+            "campaign_id": campaign_id,
+            "items": items,
+            "next_cursor": items[-1]["candidate_id"] if len(rows) > limit else None,
+        }
+
     def list_completed(self, campaign_id: UUID, query: ReviewQuery) -> dict[str, Any] | None:
         cursor = decode_cursor(query.cursor, query.sort_by) if query.cursor else None
         with self.connection() as conn, conn.cursor() as cur:

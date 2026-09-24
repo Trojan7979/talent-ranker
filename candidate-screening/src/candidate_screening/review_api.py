@@ -4,10 +4,24 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from .auth import recruiter_actor
-from .review import CompletedScreening, ReviewPage, ReviewQuery
+from .review import ActivityPage, CompletedScreening, ReviewPage, ReviewQuery
 
 router = APIRouter(prefix="/screening", tags=["recruiter review"])
 Actor = Annotated[str, Depends(recruiter_actor)]
+
+
+@router.get("/campaigns/{campaign_id}/invites", response_model=ActivityPage)
+def campaign_invites(
+    campaign_id: UUID,
+    actor: Actor,
+    request: Request,
+    after: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    result = request.app.state.repo.list_invites(campaign_id, after, limit)
+    if result is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return result
 
 
 @router.get("/campaigns/{campaign_id}/results", response_model=ReviewPage)
