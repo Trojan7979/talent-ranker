@@ -180,6 +180,25 @@ button:disabled {
   font-size: 13px;
 }
 
+.screening-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 28px;
+  display: grid;
+  gap: 20px;
+}
+
+.screening-header h1 { margin-bottom: 4px; }
+.screening-panel { padding: 24px; background: #fff; border: 1px solid #d9deea; border-radius: 12px; }
+.screening-panel h2 { margin-top: 0; }
+.screening-title-row { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.screening-title-row p { color: #62708a; }
+.recipient-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.recipient-list span { background: #e9efff; color: #1f4290; padding: 8px 10px; border-radius: 6px; }
+.approval-box { display: grid; justify-items: start; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #d9deea; }
+.inline-check { display: flex; align-items: start; gap: 10px; }
+.inline-check input { width: auto; margin-top: 3px; }
+
 @media (max-width: 800px) {
   .workspace {
     grid-template-columns: 1fr;
