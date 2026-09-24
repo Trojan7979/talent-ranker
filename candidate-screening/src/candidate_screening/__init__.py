@@ -1,0 +1,1 @@
+"""Standalone candidate screening service."""

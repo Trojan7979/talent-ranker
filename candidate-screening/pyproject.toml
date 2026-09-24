@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "candidate-screening"
+version = "0.1.0"
+description = "Deterministic candidate screening service"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.7,<3",
+  "pydantic-settings>=2.6,<3",
+  "psycopg[binary,pool]>=3.2,<4",
+  "uvicorn[standard]>=0.32,<1",
+]
+
+[project.optional-dependencies]
+dev = ["httpx2>=2.13,<3", "pytest>=8,<9", "ruff>=0.8,<1"]
+
+[project.scripts]
+candidate-screening = "candidate_screening.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
