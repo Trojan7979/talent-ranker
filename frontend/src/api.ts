@@ -12,6 +12,16 @@ export type RankResponse = {
   results: CandidateScore[];
 };
 
+export type SavedRunPage = {
+  run_id: string;
+  job_id: string;
+  job_profile_version_id: string | null;
+  created_at: string;
+  total_count: number;
+  items: CandidateScore[];
+  next_after_rank: number | null;
+};
+
 export type HiringPriorities = {
   must_have_skills: string[];
   preferred_skills: string[];
@@ -105,4 +115,16 @@ export async function rankCandidates(
     }),
   });
   return parseResponse(response, "Ranking request");
+}
+
+export async function getSavedRun(
+  runId: string,
+  afterRank = 0,
+  signal?: AbortSignal,
+): Promise<SavedRunPage> {
+  const query = new URLSearchParams({ after_rank: String(afterRank), limit: "50" });
+  const response = await fetch(`${apiBaseUrl}/ranking-runs/${encodeURIComponent(runId)}?${query}`, {
+    signal,
+  });
+  return parseResponse(response, "Saved shortlist");
 }

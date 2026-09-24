@@ -112,6 +112,60 @@ button:disabled {
   color: #62708a;
 }
 
+.shortlist-workspace {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.shortlist-header {
+  margin-bottom: 24px;
+}
+
+.shortlist-header h1 {
+  margin-bottom: 8px;
+}
+
+.shortlist-header p {
+  color: #62708a;
+  overflow-wrap: anywhere;
+}
+
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.secondary-button {
+  color: #2458d3;
+  background: #e9efff;
+}
+
+.shortlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+
+.result-card.selected {
+  border-color: #2458d3;
+  box-shadow: 0 0 0 2px #2458d3;
+}
+
+.candidate-select {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+}
+
+.candidate-select input {
+  width: auto;
+}
+
 .result-card p {
   grid-column: 1 / -1;
   color: #3d4860;
