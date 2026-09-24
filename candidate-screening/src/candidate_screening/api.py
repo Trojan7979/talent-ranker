@@ -6,6 +6,7 @@ from .candidate_api import router as candidate_router
 from .config import Settings
 from .proposal_api import router as proposal_router
 from .repository import PostgresRepository
+from .review_api import router as review_router
 from .schemas import HealthResponse
 
 
@@ -26,6 +27,7 @@ def create_app(repository=None, settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.include_router(proposal_router)
     app.include_router(candidate_router)
+    app.include_router(review_router)
 
     @app.get("/health", response_model=HealthResponse, operation_id="screening_health")
     def health() -> HealthResponse:

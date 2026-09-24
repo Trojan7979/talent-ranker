@@ -11,6 +11,7 @@ from .campaign_store import CampaignStoreMixin
 from .delivery_store import DeliveryStoreMixin
 from .ranking_read import RankingReadMixin
 from .response_store import ResponseStoreMixin
+from .review_store import ReviewStoreMixin
 
 
 class PostgresRepository(
@@ -18,6 +19,7 @@ class PostgresRepository(
     CampaignStoreMixin,
     DeliveryStoreMixin,
     ResponseStoreMixin,
+    ReviewStoreMixin,
     RankingReadMixin,
 ):
     """Own a bounded pool; each use case borrows one connection."""
