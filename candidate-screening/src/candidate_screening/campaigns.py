@@ -52,6 +52,10 @@ class EditCampaignRequest(BaseModel):
     message_template: str = Field(min_length=1, max_length=20000)
 
 
+class ApproveCampaignRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
+
+
 class CampaignResponse(BaseModel):
     id: UUID
     job_id: str

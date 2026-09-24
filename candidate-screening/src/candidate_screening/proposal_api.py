@@ -6,6 +6,7 @@ from psycopg.errors import UniqueViolation
 
 from .auth import recruiter_actor
 from .campaigns import (
+    ApproveCampaignRequest,
     CampaignResponse,
     ContactRequest,
     ContactResponse,
@@ -102,4 +103,22 @@ def reject_campaign(campaign_id: UUID, expected_revision: int, actor: Actor, req
     result = request.app.state.repo.reject_campaign(campaign_id, expected_revision)
     if result is None:
         raise HTTPException(status_code=409, detail="campaign is no longer rejectable")
+    return result
+
+
+@router.post("/campaigns/{campaign_id}/approve", response_model=CampaignResponse)
+def approve_campaign(
+    campaign_id: UUID, details: ApproveCampaignRequest, actor: Actor, request: Request
+):
+    try:
+        result = request.app.state.repo.approve_campaign(
+            campaign_id,
+            details.expected_revision,
+            actor,
+            request.app.state.settings.public_base_url,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
     return result
