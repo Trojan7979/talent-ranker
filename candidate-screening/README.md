@@ -91,6 +91,10 @@ with the send-only OAuth scope. MCP is not part of delivery.
 
 ## Mock data and checks
 
+For an ordered ranking-to-screening API walkthrough with a disposable database, fake
+email delivery, candidate responses, and expected outcomes, use
+[`docs/mock-api-workflow.md`](docs/mock-api-workflow.md).
+
 The Postgres tests create a uniquely named test schema, minimal upstream candidates/job/ranking
 fixtures, and the screening migration inside a transaction that is rolled back. They do not alter
 the real ranking tables. The fake sender captures initial messages in tests.
