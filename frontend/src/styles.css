@@ -166,6 +166,19 @@ button:disabled {
   width: auto;
 }
 
+.open-campaign {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.open-campaign label { flex: 1; }
+
+@media (max-width: 600px) {
+  .open-campaign { display: grid; }
+}
+
 .result-card p {
   grid-column: 1 / -1;
   color: #3d4860;

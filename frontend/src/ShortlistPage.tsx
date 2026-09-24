@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { getSavedRun } from "./api";
 import type { CandidateScore, SavedRunPage } from "./api";
 
 export function ShortlistPage() {
   const { jobId, runId } = useParams();
+  const navigate = useNavigate();
+  const [campaignId, setCampaignId] = useState("");
   const [run, setRun] = useState<SavedRunPage | null>(null);
   const [candidates, setCandidates] = useState<CandidateScore[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -68,6 +70,16 @@ export function ShortlistPage() {
         {run && <p>{run.total_count} candidates · Criteria version {run.job_profile_version_id ?? "unavailable"}</p>}
       </header>
       {error && <p className="error" role="alert">{error}</p>}
+      <form className="open-campaign" onSubmit={(event) => {
+        event.preventDefault();
+        navigate(`/screening/campaigns/${encodeURIComponent(campaignId.trim())}`);
+      }}>
+        <label>Open an existing screening campaign
+          <input value={campaignId} onChange={(event) => setCampaignId(event.target.value)}
+            placeholder="Campaign ID" required />
+        </label>
+        <button type="submit" disabled={!campaignId.trim()}>Open campaign</button>
+      </form>
       {run && candidates.length > 0 && (
         <div className="selection-toolbar">
           <button type="button" className="secondary-button" onClick={toggleLoaded}>
