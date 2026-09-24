@@ -45,6 +45,7 @@ def write_outputs(results, output: Path) -> None:
                 "score_components": result.components,
                 "evidence": result.evidence,
                 "reasoning": result.reasoning,
+                "requirement_evidence": result.requirement_evidence,
             }
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -69,7 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--manifest", type=Path, required=True)
     rank = sub.add_parser("rank", help="Rank indexed candidates for a job description")
     rank.add_argument("--job-id", required=True)
-    rank.add_argument("--jd", type=Path, required=True)
+    rank.add_argument("--profile-version-id", required=True)
     rank.add_argument("--output", type=Path, default=Path("ranking.csv"))
     rank.add_argument("--top-k", type=int, default=100)
     audit = sub.add_parser("privacy-audit", help="Scan stored text for supported contact PII")
@@ -167,11 +168,14 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
                 print("\n".join(report.failures))
                 raise SystemExit(1)
         else:
-            run_id, results = pipeline.rank(
-                args.job_id,
-                args.jd.read_text(encoding="utf-8"),
-                args.top_k,
-            )
+            profile = pipeline.repo.get_job_profile(args.profile_version_id)
+            if profile is None:
+                raise ValueError("job profile version not found")
+            if profile["job_id"] != args.job_id:
+                raise ValueError("job profile does not belong to requested job")
+            if profile["status"] != "approved":
+                raise ValueError("job profile must be approved before ranking")
+            run_id, results = pipeline.rank(args.job_id, profile, args.top_k)
             write_outputs(results, args.output)
             print(f"saved run {run_id}: {args.output} and {args.output.with_suffix('.jsonl')}")
     finally:

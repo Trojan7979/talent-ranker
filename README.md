@@ -19,7 +19,7 @@ talent-ranker ingest CAND_0001 .\resumes\candidate-1.pdf --source-uri gdrive://F
 talent-ranker ingest-drive CAND_0002 GOOGLE_DRIVE_FILE_ID --metadata ats.json
 talent-ranker drive-inventory GOOGLE_DRIVE_FOLDER_ID --output drive_inventory.csv
 talent-ranker ingest-drive-folder GOOGLE_DRIVE_FOLDER_ID --manifest drive_inventory.csv
-talent-ranker rank --job-id senior-ai-engineer --jd .\job.txt --output .\ranking.csv
+talent-ranker rank --job-id senior-ai-engineer --profile-version-id PROFILE_UUID --output .\ranking.csv
 uvicorn talent_ranker.api:app --reload
 python validate_submission.py .\ranking.csv
 ```
@@ -49,7 +49,9 @@ Client storage adapters (Drive today; S3/Azure/SFTP later)
                   v
 Canonical object storage (S3 by default) -> ingestion/indexing -> Postgres/pgvector
                                                                |
-Recruiter UI -> FastAPI -> hybrid retrieval -> reranking -> ranked shortlist
+Recruiter UI -> calibrate + approve hiring priorities -> FastAPI
+                                                     -> hybrid retrieval
+                                                     -> calibrated reranking -> ranked shortlist
                                       |
                                       v
                          get_candidate_evidence
@@ -74,6 +76,11 @@ GET /ranking-runs/{run_id}/candidates/{candidate_id}/evidence
 
 It returns the persisted rank, score components, redacted evidence, reasoning, and job context for
 that exact ranking run.
+
+Job descriptions are calibrated before ranking. `POST /jobs/calibrate` creates an editable draft;
+`PUT /job-profiles/{profile_version_id}` saves recruiter changes, and
+`POST /job-profiles/{profile_version_id}/approve` freezes the approved version. `POST /rank`
+requires that approved profile ID and stores it with the ranking run.
 
 ## Metadata
 

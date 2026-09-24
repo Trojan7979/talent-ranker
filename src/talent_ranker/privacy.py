@@ -3,13 +3,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 @dataclass(frozen=True)
 class PiiFinding:
     kind: str
     start: int
     end: int
-
 
 _EMAIL_PATTERN = re.compile(
     r"(?<![\w.+-])[\w.!#$%&'*+/=?^`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+",
@@ -30,7 +28,6 @@ _PATTERNS = (
     ("phone", _PHONE_PATTERN, "[REDACTED_PHONE]"),
 )
 
-
 def detect_pii(text: str) -> list[PiiFinding]:
     """Locate supported contact identifiers without retaining their values."""
     findings = [
@@ -39,7 +36,6 @@ def detect_pii(text: str) -> list[PiiFinding]:
         for match in pattern.finditer(text)
     ]
     return sorted(findings, key=lambda finding: (finding.start, finding.end))
-
 
 def redact_pii(text: str) -> str:
     """Replace supported contact identifiers with explicit, non-sensitive labels."""

@@ -1,3 +1,6 @@
+from typing import Literal
+
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +19,11 @@ class Settings(BaseSettings):
     retrieval_limit: int = 300
     rerank_limit: int = 100
     rrf_k: int = 60
+    calibration_extractor: Literal["rules", "llm"] = "rules"
+    calibration_api_url: str = "https://platform.qubrid.com/v1/chat/completions"
+    calibration_api_key: SecretStr | None = None
+    calibration_model: str = "deepseek-ai/DeepSeek-V4-Pro"
+    calibration_timeout_seconds: float = 60.0
     google_credentials_file: str = "secrets/google-client.json"
     google_token_file: str = ".tokens/drive.json"
     canonical_storage_backend: str = "s3"

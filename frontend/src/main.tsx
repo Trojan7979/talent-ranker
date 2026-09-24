@@ -1,6 +1,13 @@
 import React, { ChangeEvent, FormEvent, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CandidateScore, rankCandidates } from "./api";
+import {
+  approveJobProfile,
+  calibrateJob,
+  rankCandidates,
+  updateJobProfile,
+} from "./api";
+import type { CandidateScore, JobProfile } from "./api";
+import { CalibrationPanel } from "./CalibrationPanel";
 import "./styles.css";
 
 function App() {
@@ -8,14 +15,14 @@ function App() {
   const [jobDescription, setJobDescription] = useState("");
   const [topK, setTopK] = useState(2);
   const [results, setResults] = useState<CandidateScore[]>([]);
+  const [profile, setProfile] = useState<JobProfile | null>(null);
+  const [approvedBy, setApprovedBy] = useState("recruiter");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  async function loadJobDescriptionFiles(event: ChangeEvent<HTMLInputElement>) {
+  async function loadFiles(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    if (files.length === 0) {
-      return;
-    }
+    if (!files.length) return;
     setError(null);
     try {
       const parts = await Promise.all(
@@ -25,20 +32,41 @@ function App() {
         }),
       );
       setJobDescription(parts.join("\n\n"));
+      setProfile(null);
     } catch {
       setError("Could not read the selected JD file.");
     }
   }
 
-  async function submit(event: FormEvent) {
+  async function calibrate(event: FormEvent) {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
     try {
-      const response = await rankCandidates(jobId, jobDescription, topK);
+      setProfile(await calibrateJob(jobId, jobDescription));
+      setResults([]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Calibration failed");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function approveAndRank() {
+    if (!profile) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      let approved = profile;
+      if (profile.status === "draft") {
+        const updated = await updateJobProfile(profile);
+        approved = await approveJobProfile(updated.profile_version_id, approvedBy);
+      }
+      setProfile(approved);
+      const response = await rankCandidates(jobId, approved.profile_version_id, topK);
       setResults(response.results);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Ranking failed");
+      setError(cause instanceof Error ? cause.message : "Approval or ranking failed");
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +76,7 @@ function App() {
     <main className="workspace">
       <section className="query-panel">
         <h1>Talent Ranker</h1>
-        <form onSubmit={submit}>
+        <form onSubmit={calibrate}>
           <label>
             Job ID
             <input value={jobId} onChange={(event) => setJobId(event.target.value)} />
@@ -65,26 +93,34 @@ function App() {
           </label>
           <label>
             Load JD files
-            <input
-              type="file"
-              accept=".txt,.md,text/plain,text/markdown"
-              multiple
-              onChange={loadJobDescriptionFiles}
-            />
+            <input type="file" accept=".txt,.md" multiple onChange={loadFiles} />
             <span className="hint">Select one or more TXT/Markdown parts.</span>
           </label>
           <label>
             Job description preview
             <textarea
               value={jobDescription}
-              onChange={(event) => setJobDescription(event.target.value)}
+              onChange={(event) => {
+                setJobDescription(event.target.value);
+                setProfile(null);
+              }}
               rows={12}
             />
           </label>
-          <button disabled={isLoading || jobDescription.length < 20 || topK < 1 || topK > 1000}>
-            {isLoading ? "Ranking..." : "Rank candidates"}
+          <button disabled={isLoading || jobDescription.length < 20}>
+            {isLoading ? "Working..." : "Calibrate hiring criteria"}
           </button>
         </form>
+        {profile && (
+          <CalibrationPanel
+            profile={profile}
+            approvedBy={approvedBy}
+            busy={isLoading}
+            onChange={setProfile}
+            onApprovedByChange={setApprovedBy}
+            onApproveAndRank={approveAndRank}
+          />
+        )}
         {error && <p className="error">{error}</p>}
       </section>
       <section className="results-panel">

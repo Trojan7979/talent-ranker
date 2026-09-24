@@ -25,6 +25,7 @@ def test_get_candidate_evidence_returns_persisted_ranking_evidence():
         {
             "run_id": str(RUN_ID),
             "job_id": "senior-ai-engineer",
+            "job_profile_version_id": "22222222-2222-2222-2222-222222222222",
             "candidate_id": "CAND_0001",
             "rank": 1,
             "score": 0.91,
@@ -39,6 +40,7 @@ def test_get_candidate_evidence_returns_persisted_ranking_evidence():
     response = get_candidate_evidence(RUN_ID, "CAND_0001")
 
     assert response.rank == 1
+    assert str(response.job_profile_version_id) == "22222222-2222-2222-2222-222222222222"
     assert response.evidence == ["Built production retrieval systems."]
     assert repository.calls == [(str(RUN_ID), "CAND_0001")]
 

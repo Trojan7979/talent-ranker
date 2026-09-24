@@ -24,6 +24,7 @@ class RankedCandidate:
     components: dict[str, float]
     evidence: list[str]
     reasoning: str
+    requirement_evidence: list[dict] = field(default_factory=list)
 
 
 def reciprocal_rank_fusion(
@@ -72,11 +73,19 @@ def quality_multiplier(metadata: dict) -> tuple[float, list[str]]:
     return multiplier, concerns
 
 
-def final_score(rrf: float, reranker_logit: float, metadata: dict) -> tuple[float, dict, list[str]]:
+def final_score(
+    rrf: float,
+    reranker_logit: float,
+    metadata: dict,
+    calibrated_priority: float | None = None,
+) -> tuple[float, dict, list[str]]:
     semantic = sigmoid(reranker_logit)
     # RRF values are about 0.01-0.02 with k=60; normalize into a bounded feature.
     retrieval = min(1.0, rrf * 60.0)
-    fit = 0.72 * semantic + 0.28 * retrieval
+    if calibrated_priority is None:
+        fit = 0.72 * semantic + 0.28 * retrieval
+    else:
+        fit = 0.55 * semantic + 0.20 * retrieval + 0.25 * calibrated_priority
     multiplier, concerns = quality_multiplier(metadata)
     score = fit * multiplier
     return (
@@ -84,6 +93,11 @@ def final_score(rrf: float, reranker_logit: float, metadata: dict) -> tuple[floa
         {
             "semantic": round(semantic, 6),
             "retrieval": round(retrieval, 6),
+            **(
+                {"calibrated_priority": round(calibrated_priority, 6)}
+                if calibrated_priority is not None
+                else {}
+            ),
             "quality_multiplier": round(multiplier, 6),
         },
         concerns,
@@ -97,7 +111,7 @@ def evidence_snippet(text: str, jd_terms: set[str], limit: int = 220) -> str:
 
 
 def build_reasoning(evidence: list[str], concerns: list[str], score: float) -> str:
-    fact = evidence[0] if evidence else "Resume evidence matched the role requirements."
+    fact = evidence[0] if evidence else "No direct requirement evidence was found"
     fact = redact_pii(fact).rstrip(".") + "."
     if concerns:
         return f"{fact} Concern: {concerns[0]}."

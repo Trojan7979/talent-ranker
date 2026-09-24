@@ -18,7 +18,6 @@ class DriveFile:
     md5_checksum: str = ""
     size: int | None = None
 
-
 class ClientStorageAdapter(Protocol):
     """A read-only adapter for storage controlled by a client."""
 
@@ -31,7 +30,6 @@ class CanonicalObjectStore(Protocol):
     """Durable storage used as the source of truth by the ranking platform."""
 
     def put_file(self, object_key: str, source: Path, content_type: str) -> str: ...
-
 
 class S3ObjectStore:
     """Canonical object storage backed by S3 or an S3-compatible service."""
@@ -63,7 +61,6 @@ class S3ObjectStore:
         )
         return f"s3://{self.bucket}/{key}"
 
-
 class FilesystemObjectStore:
     """Local canonical store for development and tests."""
 
@@ -91,7 +88,6 @@ def store_canonical_resume(
     suffix = source.suffix.lower() or ".pdf"
     key = f"candidates/{candidate_id}/{digest}{suffix}"
     return store.put_file(key, source, "application/pdf")
-
 
 class GoogleDriveStore:
     """Downloads private PDF blobs from a user-authorized Google Drive account."""

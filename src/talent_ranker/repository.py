@@ -3,14 +3,16 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator, Sequence
 
+from .candidate_chunks import CandidateChunksRepositoryMixin
 from .documents import Chunk
+from .job_profiles import JobProfileRepositoryMixin
 
 
 def _vector(values: Sequence[float]) -> str:
     return "[" + ",".join(f"{float(v):.8f}" for v in values) + "]"
 
 
-class PostgresRepository:
+class PostgresRepository(CandidateChunksRepositoryMixin, JobProfileRepositoryMixin):
     def __init__(self, database_url: str):
         import psycopg
 
@@ -33,6 +35,10 @@ class PostgresRepository:
                      FROM resume_chunks
                      UNION ALL
                      SELECT candidate_id, 'ranking_results.evidence', evidence::text
+                     FROM ranking_results
+                     UNION ALL
+                     SELECT candidate_id, 'ranking_results.requirement_evidence',
+                            requirement_evidence::text
                      FROM ranking_results
                      UNION ALL
                      SELECT candidate_id, 'ranking_results.reasoning', reasoning
@@ -91,23 +97,29 @@ class PostgresRepository:
         with self.conn.cursor() as cur:
             cur.execute(
                 """WITH nearest_chunks AS (
-                       SELECT candidate_id, parent_content AS content,
-                         1-(embedding <=> %s::vector) similarity
-                       FROM resume_chunks
-                       ORDER BY embedding <=> %s::vector LIMIT %s
+                       SELECT rc.candidate_id, rc.parent_content AS content,
+                         1-(rc.embedding <=> %s::vector) similarity
+                       FROM resume_chunks rc
+                       JOIN candidates c ON c.candidate_id = rc.candidate_id
+                       WHERE c.deleted_at IS NULL
+                       ORDER BY rc.embedding <=> %s::vector, rc.candidate_id, rc.ordinal
+                       LIMIT %s
                    ), best_per_candidate AS (
                        SELECT DISTINCT ON (candidate_id) candidate_id, content, similarity
-                       FROM nearest_chunks ORDER BY candidate_id, similarity DESC
+                       FROM nearest_chunks ORDER BY candidate_id, similarity DESC, content
                    )
                    SELECT candidate_id, content, similarity FROM best_per_candidate
-                   ORDER BY similarity DESC LIMIT %s""",
+                   ORDER BY similarity DESC, candidate_id LIMIT %s""",
                 (_vector(embedding), _vector(embedding), limit * 3, limit),
             )
             dense_rows = sorted(cur.fetchall(), key=lambda row: row[2], reverse=True)[:limit]
             cur.execute(
-                f"""SELECT candidate_id, parent_content, ts_rank_cd(content_tsv, {query}) score
-                     FROM resume_chunks WHERE content_tsv @@ {query}
-                     ORDER BY score DESC LIMIT %s""",
+                f"""SELECT rc.candidate_id, rc.parent_content,
+                            ts_rank_cd(rc.content_tsv, {query}) score
+                     FROM resume_chunks rc
+                     JOIN candidates c ON c.candidate_id = rc.candidate_id
+                     WHERE c.deleted_at IS NULL AND rc.content_tsv @@ {query}
+                     ORDER BY score DESC, rc.candidate_id, rc.ordinal LIMIT %s""",
                 (jd, jd, limit * 3),
             )
             lexical_rows = cur.fetchall()
@@ -123,7 +135,7 @@ class PostgresRepository:
         chunks = {row[0]: [row[1]] for row in dense_rows}
         for cid, values in lexical_chunks.items():
             chunks.setdefault(cid, []).extend(values[:2])
-        selected_ids = list(set(dense_ids + lexical_ids))
+        selected_ids = list(dict.fromkeys(dense_ids + lexical_ids))
         with self.conn.cursor() as cur:
             cur.execute(
                 """SELECT candidate_id, metadata
@@ -147,7 +159,8 @@ class PostgresRepository:
         with self.conn.cursor() as cur:
             cur.execute(
                 """SELECT rr.run_id, r.job_id, rr.candidate_id, rr.rank, rr.score,
-                          rr.score_components, rr.evidence, rr.reasoning, r.created_at
+                          rr.score_components, rr.evidence, rr.reasoning, r.created_at,
+                          r.job_profile_version_id, rr.requirement_evidence
                    FROM ranking_results rr
                    JOIN ranking_runs r ON r.run_id = rr.run_id
                    JOIN candidates c ON c.candidate_id = rr.candidate_id
@@ -168,20 +181,38 @@ class PostgresRepository:
             "evidence": row[6],
             "reasoning": row[7],
             "created_at": row[8],
+            "job_profile_version_id": str(row[9]) if row[9] else None,
+            "requirement_evidence": row[10],
         }
 
-    def save_run(self, job_id: str, jd: str, models: dict, config: dict, results: Sequence) -> str:
+    def save_run(
+        self,
+        job_id: str,
+        profile_version_id: str,
+        jd: str,
+        models: dict,
+        config: dict,
+        results: Sequence,
+    ) -> str:
         with self.conn.transaction(), self.conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO ranking_runs(job_id,jd_text,model_versions,scoring_config)
-                   VALUES (%s,%s,%s::jsonb,%s::jsonb) RETURNING run_id""",
-                (job_id, jd, json.dumps(models), json.dumps(config)),
+                """INSERT INTO ranking_runs
+                   (job_id,job_profile_version_id,jd_text,model_versions,scoring_config)
+                   VALUES (%s,%s::uuid,%s,%s::jsonb,%s::jsonb) RETURNING run_id""",
+                (
+                    job_id,
+                    profile_version_id,
+                    jd,
+                    json.dumps(models),
+                    json.dumps(config),
+                ),
             )
             run_id = str(cur.fetchone()[0])
             cur.executemany(
                 """INSERT INTO ranking_results
-                   (run_id,candidate_id,rank,score,score_components,evidence,reasoning)
-                   VALUES (%s::uuid,%s,%s,%s,%s::jsonb,%s::jsonb,%s)""",
+                   (run_id,candidate_id,rank,score,score_components,evidence,reasoning,
+                    requirement_evidence)
+                   VALUES (%s::uuid,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s::jsonb)""",
                 [
                     (
                         run_id,
@@ -191,6 +222,7 @@ class PostgresRepository:
                         json.dumps(r.components),
                         json.dumps(r.evidence),
                         r.reasoning,
+                        json.dumps(r.requirement_evidence),
                     )
                     for rank, r in enumerate(results, 1)
                 ],

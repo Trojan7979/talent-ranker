@@ -11,7 +11,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -43,12 +44,32 @@ form {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid #c8cfdd;
   border-radius: 8px;
   padding: 12px;
   background: #ffffff;
+}
+
+.calibration-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #d9deea;
+}
+
+.calibration-panel h2,
+.calibration-panel p {
+  margin: 0;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 button {
