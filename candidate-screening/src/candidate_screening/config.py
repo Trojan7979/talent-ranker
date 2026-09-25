@@ -23,4 +23,7 @@ class Settings(BaseSettings):
     gmail_sender_email: str | None = None
     gmail_client_secrets_file: Path | None = None
     gmail_token_file: Path = Path(".tokens/gmail-sender.json")
+    gmail_web_client_secrets_file: Path = Path("secrets/gmail-web-client.json")
+    gmail_web_redirect_uri: str = "http://127.0.0.1:8001/screening/oauth/gmail/callback"
+    frontend_base_url: str = "http://127.0.0.1:5173"
     recruiter_tokens: dict[str, str] = Field(default_factory=dict)

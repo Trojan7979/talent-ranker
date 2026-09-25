@@ -42,6 +42,31 @@ accounts are recipients; receiving an email does not require Microsoft Graph or 
 The backend connects directly to the [Gmail API](https://developers.google.com/workspace/gmail/api/guides/sending)
 with the send-only OAuth scope. MCP is not part of delivery.
 
+### Connect Gmail from the recruiter page
+
+The campaign page now offers **Connect Gmail** when the configured sender is not authorized.
+This uses Google's server-side web authorization-code flow: the recruiter visits Google for
+consent, the backend verifies the configured sender account and one-use OAuth state, then saves
+the refresh token only on the server. The browser never receives Gmail credentials.
+The consent request includes Gmail send access plus basic identity scopes to verify the sender.
+
+For this local pilot, create a second Google OAuth client of type **Web application** in the
+same Google Cloud project. Register exactly
+`http://127.0.0.1:8001/screening/oauth/gmail/callback` as an authorized redirect URI, download
+its JSON to `secrets/gmail-web-client.json`, and keep that file out of Git. The original
+`gmail-desktop-client.json` remains for the CLI fallback; it cannot serve as the web client.
+If the consent screen is in Testing, add the fifth Gmail sender as a test user. Install the
+`[gmail]` dependency extra, set `SCREENING_SENDER_BACKEND=gmail_api` and
+`SCREENING_GMAIL_SENDER_EMAIL` in `.env`, and apply `db/schema.sql` again to add the one-use
+OAuth state table. The API must be running on port 8001 for Google's callback. Then open a
+proposed campaign, enter recruiter access, and click **Connect Gmail**. After Google's redirect,
+enter recruiter access again; the sender status should say **Connected**.
+
+This remains a single-sender local pilot. The token is stored in the existing ignored
+`.tokens/gmail-sender.json` server file. A multi-tenant deployment should store encrypted
+per-organization credentials in a managed secret store and use its normal recruiter identity
+provider rather than the local bearer-token map.
+
 1. Copy `.env.example` to `.env` in this directory. Set `SCREENING_SENDER_BACKEND=gmail_api` and
    paste the **fifth sender Gmail address** into `SCREENING_GMAIL_SENDER_EMAIL`. `.env` is ignored
    by Git. Keep `SCREENING_RECRUITER_TOKENS` set for the local recruiter API.

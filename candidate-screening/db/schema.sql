@@ -141,3 +141,14 @@ CREATE TABLE IF NOT EXISTS screening_delivery_outbox (
 CREATE INDEX IF NOT EXISTS screening_delivery_due_idx
     ON screening_delivery_outbox (next_attempt_at, id)
     WHERE status IN ('pending', 'failed', 'processing');
+
+CREATE TABLE IF NOT EXISTS screening_gmail_oauth_states (
+    state_hash text PRIMARY KEY,
+    actor text NOT NULL,
+    code_verifier text NOT NULL,
+    nonce text NOT NULL,
+    campaign_id uuid REFERENCES screening_campaigns(id),
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS screening_gmail_oauth_expiry_idx
+    ON screening_gmail_oauth_states (expires_at);
