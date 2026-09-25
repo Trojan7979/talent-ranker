@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from .approval_store import ApprovalStoreMixin
+from .batch_read import BatchReadMixin
 from .campaign_store import CampaignStoreMixin
 from .delivery_store import DeliveryStoreMixin
 from .ranking_read import RankingReadMixin
@@ -21,6 +22,7 @@ class PostgresRepository(
     ResponseStoreMixin,
     ReviewStoreMixin,
     RankingReadMixin,
+    BatchReadMixin,
 ):
     """Own a bounded pool; each use case borrows one connection."""
 
