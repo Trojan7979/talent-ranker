@@ -3,9 +3,9 @@ from uuid import UUID
 
 from .config import Settings
 from .delivery import InitialInviteDispatcher
-from .email import FakeEmailSender, SmtpEmailSender
-from .gmail import GmailApiSender, authorize_gmail
+from .gmail import authorize_gmail
 from .repository import PostgresRepository
+from .sender_factory import create_sender
 
 
 def main() -> None:
@@ -31,26 +31,12 @@ def main() -> None:
         finally:
             repo.close()
         return
-    if settings.sender_backend == "fake":
-        sender = FakeEmailSender()
-    elif settings.sender_backend == "smtp":
-        if not settings.smtp_host or not settings.smtp_from_email:
-            parser.error("SMTP requires SCREENING_SMTP_HOST and SCREENING_SMTP_FROM_EMAIL")
-        sender = SmtpEmailSender(
-            host=settings.smtp_host,
-            port=settings.smtp_port,
-            from_email=settings.smtp_from_email,
-            username=settings.smtp_username,
-            password=settings.smtp_password,
-        )
-    elif settings.sender_backend == "gmail_api":
-        if not settings.gmail_sender_email:
-            parser.error("SCREENING_GMAIL_SENDER_EMAIL is required")
-        if not args.campaign_id:
-            parser.error("Gmail dispatch requires --campaign-id")
-        sender = GmailApiSender(settings.gmail_sender_email, settings.gmail_token_file)
-    else:
-        parser.error("SCREENING_SENDER_BACKEND must be fake, smtp, or gmail_api")
+    if settings.sender_backend == "gmail_api" and not args.campaign_id:
+        parser.error("Gmail dispatch requires --campaign-id")
+    try:
+        sender = create_sender(settings)
+    except ValueError as error:
+        parser.error(str(error))
     repo = PostgresRepository(settings.database_url)
     try:
         print(InitialInviteDispatcher(repo, sender).run_once(args.limit, args.campaign_id))
