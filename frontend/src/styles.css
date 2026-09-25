@@ -217,6 +217,9 @@ button:disabled {
 .screening-title-row p { color: #62708a; }
 .recipient-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .recipient-list span { background: #e9efff; color: #1f4290; padding: 8px 10px; border-radius: 6px; }
+.recipient-list span small { display: block; margin-top: 4px; color: #43567e; }
+.recipient-list label { border: 1px solid #d9deea; border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+.recipient-list label input { width: auto; margin-right: 5px; }
 .approval-box { display: grid; justify-items: start; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #d9deea; }
 .inline-check { display: flex; align-items: start; gap: 10px; }
 .inline-check input { width: auto; margin-top: 3px; }

@@ -2,6 +2,9 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { screeningApi } from "./screeningApi";
 import type { ActivityPage, Campaign, ReviewPage } from "./screeningApi";
+import { CampaignEditor } from "./CampaignEditor";
+import { batchApi } from "./batchApi";
+import type { ContactPreview } from "./batchApi";
 
 const outcomeLabel = {
   proceed_to_interview: "Screening passed",
@@ -16,12 +19,14 @@ export function CampaignPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [results, setResults] = useState<ReviewPage | null>(null);
   const [activity, setActivity] = useState<ActivityPage | null>(null);
+  const [recipientContacts, setRecipientContacts] = useState<ContactPreview[]>([]);
   const [verifiedUrl, setVerifiedUrl] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState(false);
 
   const refresh = useCallback(async (auth: string) => {
     if (!campaignId) return;
@@ -30,9 +35,12 @@ export function CampaignPage() {
       screeningApi.getResults(campaignId, auth),
       screeningApi.getActivity(campaignId, auth),
     ]);
+    const contacts = current.status === "proposed"
+      ? await batchApi.contacts(current.final_candidate_ids ?? current.proposed_candidate_ids, auth) : [];
     setCampaign(current);
     setResults(completed);
     setActivity(roster);
+    setRecipientContacts(contacts);
     setLastUpdated(new Date());
   }, [campaignId]);
 
@@ -62,7 +70,7 @@ export function CampaignPage() {
   }, [activeToken, refresh]);
 
   async function approve() {
-    if (!campaign || !campaignId || !verifiedUrl) return;
+    if (!campaign || !campaignId || !verifiedUrl || !recipientsReady) return;
     if (!window.confirm(`Approve ${campaign.final_candidate_ids?.length ?? campaign.proposed_candidate_ids.length} recipients and queue their links?`)) return;
     setBusy(true);
     let approved = false;
@@ -124,6 +132,9 @@ export function CampaignPage() {
   }
 
   const finalIds = campaign?.final_candidate_ids ?? campaign?.proposed_candidate_ids ?? [];
+  const contactById = new Map(recipientContacts.map((item) => [item.candidate_id, item]));
+  const recipientsReady = finalIds.length > 0 && finalIds.every((id) =>
+    contactById.get(id)?.contactable && contactById.get(id)?.email);
   return (
     <main className="screening-page">
       <header className="screening-header">
@@ -154,17 +165,28 @@ export function CampaignPage() {
               <button type="button" className="secondary-button" disabled={busy} onClick={() => refresh(activeToken).catch((cause: unknown) => setError(String(cause)))}>Refresh</button>
             </div>
             <p>Final recipients ({finalIds.length})</p>
-            <div className="recipient-list">{finalIds.map((id) => <span key={id}>{id}</span>)}</div>
+            <div className="recipient-list">{finalIds.map((id) => <span key={id}>{id}
+              {campaign.status === "proposed" && <small> {contactById.get(id)?.email ?? "Contact needed"}</small>}
+            </span>)}</div>
             <p className="hint">Proposed top-ranked IDs: {campaign.proposed_candidate_ids.join(", ")}</p>
             <p>Invitation message: {campaign.message_template}</p>
             <p>Link expiry: {campaign.expiry_hours} hours</p>
-            {campaign.status === "proposed" && (
+            {campaign.status === "proposed" && !editing && <button type="button" className="secondary-button"
+              onClick={() => setEditing(true)}>Edit final recipients and message</button>}
+            {campaign.status === "proposed" && editing && <CampaignEditor campaign={campaign} token={activeToken}
+              onCancel={() => setEditing(false)} onSaved={(updated) => {
+                setCampaign(updated);
+                setEditing(false);
+                refresh(activeToken).catch((cause: unknown) => setError(String(cause)));
+              }} />}
+            {campaign.status === "proposed" && !editing && (
               <div className="approval-box">
+                {!recipientsReady && <p className="error">Every final recipient needs a saved, contactable email.</p>}
                 <label className="inline-check">
                   <input type="checkbox" checked={verifiedUrl} onChange={(event) => setVerifiedUrl(event.target.checked)} />
                   I verified the final recipients and the server's screening link URL opens this app's /s page.
                 </label>
-                <button type="button" disabled={!verifiedUrl || busy} onClick={approve}>Approve batch and queue links</button>
+                <button type="button" disabled={!verifiedUrl || !recipientsReady || busy} onClick={approve}>Approve batch and queue links</button>
                 <p className="hint">Approval queues links and requests delivery from the configured backend sender.</p>
               </div>
             )}

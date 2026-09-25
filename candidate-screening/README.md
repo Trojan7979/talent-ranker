@@ -115,6 +115,13 @@ are kept around 250 lines or less.
 
 ## API flow
 
+The central frontend now supports the recruiter path without manual campaign API calls: open a
+saved ranking shortlist, select candidate cards, choose **Prepare screening batch**, review or
+create the job's approved-question configuration, preview the selection rule, and confirm each
+recipient's email. Saving the proposal locks the checked cards as its editable final list. The
+campaign page can edit that list and message until approval; approval requests initial delivery.
+The backend remains the authority for eligibility, revision checks, and the final approval gate.
+
 All recruiter requests use `Authorization: Bearer <configured-token>`. An approved job profile and
 saved ranking run are prerequisites. The workflow is:
 
