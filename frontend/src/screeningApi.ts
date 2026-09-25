@@ -92,6 +92,13 @@ function recruiter(token: string): HeadersInit {
 }
 
 export const screeningApi = {
+  gmailStatus: (token: string) => request<{
+    backend: string; sender_email: string | null; connected: boolean;
+  }>("/sender/gmail/status", { headers: recruiter(token) }),
+  connectGmail: (campaignId: string, token: string) =>
+    request<{ authorization_url: string }>("/sender/gmail/connect", {
+      method: "POST", headers: recruiter(token), body: JSON.stringify({ campaign_id: campaignId }),
+    }),
   getCampaign: (id: string, token: string) =>
     request<Campaign>(`/campaigns/${id}`, { headers: recruiter(token) }),
   approveCampaign: (id: string, revision: number, token: string) =>

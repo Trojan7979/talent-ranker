@@ -5,6 +5,7 @@ import type { ActivityPage, Campaign, ReviewPage } from "./screeningApi";
 import { CampaignEditor } from "./CampaignEditor";
 import { batchApi } from "./batchApi";
 import type { ContactPreview } from "./batchApi";
+import { GmailConnection } from "./GmailConnection";
 
 const outcomeLabel = {
   proceed_to_interview: "Screening passed",
@@ -156,6 +157,7 @@ export function CampaignPage() {
       {notice && <p role="status">{notice}</p>}
       {campaign && (
         <>
+          {activeToken && campaignId && <GmailConnection campaignId={campaignId} recruiterToken={activeToken} />}
           <section className="screening-panel">
             <div className="screening-title-row">
               <div>
