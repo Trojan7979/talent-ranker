@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from .auth import recruiter_actor
@@ -25,7 +25,6 @@ def dispatch_campaign(
     background_tasks: BackgroundTasks,
     actor: Actor,
     request: Request,
-    limit: int = Query(default=100, ge=1, le=100),
 ) -> DispatchAccepted:
     campaign = request.app.state.repo.get_campaign(campaign_id)
     if campaign is None:
@@ -37,5 +36,7 @@ def dispatch_campaign(
     except ValueError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     dispatcher = InitialInviteDispatcher(request.app.state.repo, sender)
-    background_tasks.add_task(dispatcher.run_once, limit, campaign_id)
+    background_tasks.add_task(
+        dispatcher.run_campaign, campaign_id, request.app.state.settings.max_campaign_size
+    )
     return DispatchAccepted(campaign_id=campaign_id)

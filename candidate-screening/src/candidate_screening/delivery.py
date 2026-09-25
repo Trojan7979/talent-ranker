@@ -32,3 +32,18 @@ class InitialInviteDispatcher:
                 self.repo.mark_delivered(message["id"], receipt)
                 counts["sent"] += 1
         return counts
+
+    def run_campaign(self, campaign_id: UUID, max_messages: int) -> dict[str, int]:
+        """Drain due initial invitations in bounded claims for one approved batch."""
+        totals = {"sent": 0, "failed": 0, "cancelled": 0}
+        remaining = max_messages
+        while remaining > 0:
+            limit = min(100, remaining)
+            counts = self.run_once(limit, campaign_id)
+            processed = sum(counts.values())
+            for state, count in counts.items():
+                totals[state] += count
+            remaining -= processed
+            if processed < limit:
+                break
+        return totals
