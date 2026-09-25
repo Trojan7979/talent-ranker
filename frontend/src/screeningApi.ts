@@ -98,6 +98,10 @@ export const screeningApi = {
     request<Campaign>(`/campaigns/${id}/approve`, {
       method: "POST", headers: recruiter(token), body: JSON.stringify({ expected_revision: revision }),
     }),
+  dispatchCampaign: (id: string, token: string) =>
+    request<{ campaign_id: string; status: "scheduled" }>(`/campaigns/${id}/dispatch`, {
+      method: "POST", headers: recruiter(token),
+    }),
   getResults: (id: string, token: string) =>
     request<ReviewPage>(`/campaigns/${id}/results`, { headers: recruiter(token) }),
   getActivity: (id: string, token: string) =>

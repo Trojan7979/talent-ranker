@@ -19,6 +19,7 @@ export function CampaignPage() {
   const [verifiedUrl, setVerifiedUrl] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -33,7 +34,6 @@ export function CampaignPage() {
     setResults(completed);
     setActivity(roster);
     setLastUpdated(new Date());
-    setError(null);
   }, [campaignId]);
 
   async function connect(event: FormEvent) {
@@ -42,6 +42,7 @@ export function CampaignPage() {
     try {
       await refresh(token.trim());
       setActiveToken(token.trim());
+      setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not open campaign.");
     } finally {
@@ -64,14 +65,36 @@ export function CampaignPage() {
     if (!campaign || !campaignId || !verifiedUrl) return;
     if (!window.confirm(`Approve ${campaign.final_candidate_ids?.length ?? campaign.proposed_candidate_ids.length} recipients and queue their links?`)) return;
     setBusy(true);
+    let approved = false;
     try {
       setCampaign(await screeningApi.approveCampaign(campaignId, campaign.revision, activeToken));
+      approved = true;
+      try {
+        await screeningApi.dispatchCampaign(campaignId, activeToken);
+        setNotice("Email delivery requested. Invitation activity will update shortly.");
+        setError(null);
+      } catch (cause) {
+        setError(`Batch approved and links queued, but sending could not start: ${cause instanceof Error ? cause.message : "unknown error"}. Use the delivery button to retry.`);
+      }
       await refresh(activeToken);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Approval failed.");
+      setError(`${approved ? "Batch approved, but refresh failed" : "Approval failed"}: ${cause instanceof Error ? cause.message : "unknown error"}`);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function dispatchQueued() {
+    if (!campaignId || !window.confirm("Request delivery of the queued invitations in this approved campaign?")) return;
+    setBusy(true);
+    try {
+      await screeningApi.dispatchCampaign(campaignId, activeToken);
+      setNotice("Email delivery requested. Invitation activity will update shortly.");
+      setError(null);
+      await refresh(activeToken);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not request delivery.");
+    } finally { setBusy(false); }
   }
 
   async function exportCandidates(candidateIds: string[]) {
@@ -119,6 +142,7 @@ export function CampaignPage() {
         </form>
       )}
       {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
       {campaign && (
         <>
           <section className="screening-panel">
@@ -141,14 +165,16 @@ export function CampaignPage() {
                   I verified the final recipients and the server's screening link URL opens this app's /s page.
                 </label>
                 <button type="button" disabled={!verifiedUrl || busy} onClick={approve}>Approve batch and queue links</button>
-                <p className="hint">Approval queues invitations; the backend dispatch command sends email separately.</p>
+                <p className="hint">Approval queues links and requests delivery from the configured backend sender.</p>
               </div>
             )}
-            {campaign.status === "approved" && <p role="status">Batch approved. Invitations are queued for backend dispatch.</p>}
+            {campaign.status === "approved" && <p role="status">Batch approved. Delivery state appears below.</p>}
           </section>
           <section className="screening-panel">
             <h2>Invitation activity</h2>
             <p className="hint">Queued means approved but not yet accepted by the email provider. Sent means provider accepted the message.</p>
+            {campaign.status === "approved" && activity?.items.some((item) => item.delivery_status === "pending" || item.delivery_status === "failed") &&
+              <button type="button" className="secondary-button" disabled={busy} onClick={dispatchQueued}>Request delivery for queued invitations</button>}
             <div className="shortlist-grid">
               {activity?.items.map((item) => (
                 <article className="result-card" key={item.invite_id}>

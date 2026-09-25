@@ -32,8 +32,8 @@ token. Keep API access logs from recording token-bearing URLs.
 Copy `.env.example` for available settings. The default invite lifetime is 48 hours from approval.
 `SCREENING_API_PORT` defaults to 8001; set it in `.env` to change the listening port when using
 `candidate-screening-api`. From this directory, `uv run candidate-screening-api --reload` also works.
-Set `SCREENING_PUBLIC_BASE_URL` to the candidate form URL when the frontend is added; for API-only
-testing it points to the invite API. No frontend is included here.
+Set `SCREENING_PUBLIC_BASE_URL` to the frontend candidate route, such as
+`http://127.0.0.1:5173/s` for a same-computer pilot, before approving a campaign.
 
 ## Four-inbox Gmail sender pilot
 
@@ -77,19 +77,20 @@ with the send-only OAuth scope. MCP is not part of delivery.
    ```
 
 6. Preview one ranking run, propose a campaign, edit its final candidate IDs to those exact four,
-   and approve it as the recruiter. Before approval, set `SCREENING_PUBLIC_BASE_URL` to the
+   and approve it as the recruiter. Frontend approval now requests dispatch for that campaign.
+   Before approval, set `SCREENING_PUBLIC_BASE_URL` to the
    reachable screening URL used in invite links. The default `localhost` URL only works on the
    machine running the API; a real inbox test across devices needs a reachable HTTPS host or
-   development tunnel. Only then run the Gmail worker for that campaign:
+   development tunnel. If frontend dispatch cannot start or a queued invitation needs a later
+   retry, run the Gmail worker for that campaign:
 
    ```powershell
    candidate-screening dispatch --once --campaign-id CAMPAIGN_UUID --limit 4
    ```
 
    Gmail dispatch requires `--campaign-id` so this pilot cannot pick up another campaign's queued
-   mail. The command reports provider acceptance counts; check the four inboxes for receipt. With
-   no frontend yet, the links open the candidate API's JSON response. Candidate answer submission
-   can be exercised through the API until the UI is wired.
+   mail. The command reports provider acceptance counts; check the four inboxes for receipt.
+   The frontend opens each link at `/s/{token}` and displays the candidate question flow.
 
 ## Mock data and checks
 
