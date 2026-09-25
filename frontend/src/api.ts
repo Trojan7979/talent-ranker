@@ -128,3 +128,8 @@ export async function getSavedRun(
   });
   return parseResponse(response, "Saved shortlist");
 }
+
+export async function getJobProfile(profileVersionId: string): Promise<JobProfile> {
+  const response = await fetch(`${apiBaseUrl}/job-profiles/${encodeURIComponent(profileVersionId)}`);
+  return parseResponse(response, "Approved hiring criteria");
+}

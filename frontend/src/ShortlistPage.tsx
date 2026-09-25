@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getSavedRun } from "./api";
 import type { CandidateScore, SavedRunPage } from "./api";
+import { BatchPreparation } from "./BatchPreparation";
 
 export function ShortlistPage() {
   const { jobId, runId } = useParams();
@@ -10,6 +11,7 @@ export function ShortlistPage() {
   const [run, setRun] = useState<SavedRunPage | null>(null);
   const [candidates, setCandidates] = useState<CandidateScore[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [preparing, setPreparing] = useState(false);
   const [requestCursor, setRequestCursor] = useState<number | null>(0);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [retry, setRetry] = useState(0);
@@ -87,7 +89,9 @@ export function ShortlistPage() {
               ? "Deselect loaded candidates" : "Select loaded candidates"}
           </button>
           <strong aria-live="polite">{selected.size} selected</strong>
-          <span className="hint">Selection is local until a campaign is proposed.</span>
+          <button type="button" disabled={!selected.size || !run.job_profile_version_id}
+            onClick={() => setPreparing(true)}>Prepare screening batch</button>
+          <span className="hint">Select the candidates to contact, then prepare the batch.</span>
         </div>
       )}
       <section className="shortlist-grid" aria-label="Ranked candidates">
@@ -106,6 +110,9 @@ export function ShortlistPage() {
           </article>
         ))}
       </section>
+      {preparing && run?.job_profile_version_id && jobId && runId &&
+        <BatchPreparation jobId={jobId} runId={runId} profileId={run.job_profile_version_id}
+          selectedIds={[...selected]} />}
       {loading && <p role="status">Loading shortlist…</p>}
       {!loading && run && candidates.length === 0 && <p>No candidates in this saved run.</p>}
       {!loading && nextCursor !== null && !error && (
