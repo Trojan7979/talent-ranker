@@ -1,11 +1,25 @@
 """Expose ranking and screening through one FastAPI listener."""
 
 from contextlib import AsyncExitStack, asynccontextmanager
+from pathlib import Path
 
-from candidate_screening.api import app as screening_app
+from candidate_screening.api import create_app as create_screening_app
+from candidate_screening.config import Settings as ScreeningSettings
 from fastapi import FastAPI
 
 from talent_ranker.api import app as ranking_app
+
+
+def screening_settings(repo_root: Path) -> ScreeningSettings:
+    """Load service settings from the existing local layout when composed at repo root."""
+    return ScreeningSettings(
+        _env_file=[repo_root / "candidate-screening" / ".env", repo_root / ".env"]
+    )
+
+
+screening_app = create_screening_app(
+    settings=screening_settings(Path(__file__).resolve().parents[2])
+)
 
 
 def create_app(ranking: FastAPI = ranking_app, screening: FastAPI = screening_app) -> FastAPI:

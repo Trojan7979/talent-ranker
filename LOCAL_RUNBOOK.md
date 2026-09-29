@@ -204,9 +204,10 @@ psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranke
 sieve-api --reload
 ```
 
-The screening schema is safe to reapply. The root environment must include `SCREENING_DATABASE_URL`
-pointing to the same database as `TALENT_RANKER_DATABASE_URL`, and
-`SCREENING_RECRUITER_TOKENS` for recruiter pages. For local candidate links, set
+The screening schema is safe to reapply. The combined app reads screening settings from
+`candidate-screening/.env`, then the root `.env`; process environment variables take precedence.
+`SCREENING_DATABASE_URL` must point to the same database as `TALENT_RANKER_DATABASE_URL`, and
+`SCREENING_RECRUITER_TOKENS` must authorize recruiter pages. For local candidate links, set
 `SCREENING_PUBLIC_BASE_URL=http://127.0.0.1:5173/s`. For Gmail sender connection on this
 combined API, set `SCREENING_GMAIL_WEB_REDIRECT_URI` to
 `http://127.0.0.1:8000/api/screening/oauth/gmail/callback` and register that exact URI in the

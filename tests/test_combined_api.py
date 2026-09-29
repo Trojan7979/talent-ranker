@@ -1,11 +1,25 @@
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from sieve_app.api import app, create_app
+from sieve_app.api import app, create_app, screening_settings
+
+
+def test_combined_api_loads_screening_service_configuration(tmp_path: Path):
+    service = tmp_path / "candidate-screening"
+    service.mkdir()
+    (service / ".env").write_text(
+        'SCREENING_RECRUITER_TOKENS={"demo-token":"demo-recruiter"}\n'
+        "SCREENING_SENDER_BACKEND=fake\n",
+        encoding="utf-8",
+    )
+    settings = screening_settings(tmp_path)
+    assert settings.recruiter_tokens == {"demo-token": "demo-recruiter"}
+    assert settings.sender_backend == "fake"
 
 
 def test_combined_api_routes_requests_and_runs_both_lifespans():
