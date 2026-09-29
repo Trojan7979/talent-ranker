@@ -19,6 +19,7 @@ from .campaigns import (
 )
 from .pipeline import ScreeningPipeline
 from .selection import SelectionRequest, SelectionResponse
+from .workflow_api import observe_campaign
 
 router = APIRouter(prefix="/screening", tags=["screening proposals"])
 Actor = Annotated[str, Depends(recruiter_actor)]
@@ -79,11 +80,13 @@ def select_batch(details: SelectionRequest, actor: Actor, request: Request):
 @router.post("/campaigns", response_model=CampaignResponse, status_code=201)
 def propose_campaign(details: CreateCampaignRequest, actor: Actor, request: Request):
     try:
-        return pipeline(request).propose(details)
+        result = pipeline(request).propose(details)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    observe_campaign(request, result["id"])
+    return result
 
 
 @router.get("/campaigns", response_model=CampaignDirectory)
@@ -112,9 +115,11 @@ def get_campaign(campaign_id: UUID, actor: Actor, request: Request):
 @router.patch("/campaigns/{campaign_id}", response_model=CampaignResponse)
 def edit_campaign(campaign_id: UUID, details: EditCampaignRequest, actor: Actor, request: Request):
     try:
-        return pipeline(request).edit(campaign_id, details)
+        result = pipeline(request).edit(campaign_id, details)
     except (ValueError, RuntimeError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    observe_campaign(request, campaign_id)
+    return result
 
 
 @router.post("/campaigns/{campaign_id}/reject", response_model=CampaignResponse)
@@ -122,6 +127,7 @@ def reject_campaign(campaign_id: UUID, expected_revision: int, actor: Actor, req
     result = request.app.state.repo.reject_campaign(campaign_id, expected_revision)
     if result is None:
         raise HTTPException(status_code=409, detail="campaign is no longer rejectable")
+    observe_campaign(request, campaign_id)
     return result
 
 
@@ -140,4 +146,5 @@ def approve_campaign(
         raise HTTPException(status_code=409, detail=str(error)) from error
     if result is None:
         raise HTTPException(status_code=404, detail="campaign not found")
+    observe_campaign(request, campaign_id)
     return result

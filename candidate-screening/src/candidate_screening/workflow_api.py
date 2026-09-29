@@ -1,5 +1,6 @@
 """Recruiter-only control and status for the optional campaign observer."""
 
+import logging
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from .auth import recruiter_actor
 
 router = APIRouter(prefix="/screening/campaigns", tags=["campaign workflow"])
 Actor = Annotated[str, Depends(recruiter_actor)]
+logger = logging.getLogger(__name__)
 
 
 class WorkflowStatus(BaseModel):
@@ -24,6 +26,17 @@ def workflow(request: Request):
     if coordinator is None:
         raise HTTPException(status_code=503, detail="campaign workflow is disabled")
     return coordinator
+
+
+def observe_campaign(request: Request, campaign_id: UUID) -> None:
+    """Keep the optional observer current without changing a committed domain response."""
+    coordinator = getattr(request.app.state, "workflow", None)
+    if coordinator is None:
+        return
+    try:
+        coordinator.sync(campaign_id)
+    except Exception:
+        logger.exception("Campaign workflow sync failed for %s", campaign_id)
 
 
 @router.post("/{campaign_id}/workflow/sync", response_model=WorkflowStatus)

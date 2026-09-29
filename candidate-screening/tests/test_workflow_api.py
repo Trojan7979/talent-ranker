@@ -39,7 +39,7 @@ def test_workflow_observes_existing_approval_and_requires_recruiter(client):
         json={"expected_revision": 1},
     )
     assert approval.status_code == 200, approval.text
-    final = client.post(path + "/sync", headers=headers())
+    final = client.get(path, headers=headers())
     assert final.status_code == 200, final.text
     assert final.json()["workflow_status"] == "observed"
     assert final.json()["campaign_status"] == "approved"

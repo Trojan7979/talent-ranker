@@ -214,8 +214,9 @@ Google OAuth client. File paths in screening settings are resolved from the repo
 Set `SCREENING_WORKFLOW_ENABLED=true` to enable the first, read-only LangGraph observer. It stores
 campaign IDs, revisions and statuses in PostgreSQL checkpoints. An authenticated recruiter can
 `POST /api/screening/campaigns/{id}/workflow/sync` after proposal or approval, then read
-`GET /api/screening/campaigns/{id}/workflow`. Approval and sending still use their existing
-domain endpoints; the observer currently requires an explicit sync call.
+`GET /api/screening/campaigns/{id}/workflow`. Proposal edits and decisions also refresh the
+observer automatically when enabled. Use explicit sync after a checkpoint outage or restart;
+approval and sending still use their existing domain endpoints.
 
 Open:
 
