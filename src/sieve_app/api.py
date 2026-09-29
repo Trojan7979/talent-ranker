@@ -12,9 +12,15 @@ from talent_ranker.api import app as ranking_app
 
 def screening_settings(repo_root: Path) -> ScreeningSettings:
     """Load service settings from the existing local layout when composed at repo root."""
-    return ScreeningSettings(
+    settings = ScreeningSettings(
         _env_file=[repo_root / "candidate-screening" / ".env", repo_root / ".env"]
     )
+    standalone_default = ScreeningSettings.model_fields["gmail_web_redirect_uri"].default
+    if settings.gmail_web_redirect_uri == standalone_default:
+        settings.gmail_web_redirect_uri = (
+            "http://127.0.0.1:8000/api/screening/oauth/gmail/callback"
+        )
+    return settings
 
 
 screening_app = create_screening_app(

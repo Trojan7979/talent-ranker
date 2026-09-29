@@ -20,6 +20,14 @@ def test_combined_api_loads_screening_service_configuration(tmp_path: Path):
     settings = screening_settings(tmp_path)
     assert settings.recruiter_tokens == {"demo-token": "demo-recruiter"}
     assert settings.sender_backend == "fake"
+    assert settings.gmail_web_redirect_uri == (
+        "http://127.0.0.1:8000/api/screening/oauth/gmail/callback"
+    )
+    (tmp_path / ".env").write_text(
+        "SCREENING_GMAIL_WEB_REDIRECT_URI=https://demo.example.test/api/screening/oauth/gmail/callback\n",
+        encoding="utf-8",
+    )
+    assert screening_settings(tmp_path).gmail_web_redirect_uri.startswith("https://demo.example.test/")
 
 
 def test_combined_api_routes_requests_and_runs_both_lifespans():
