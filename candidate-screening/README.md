@@ -18,12 +18,15 @@ uv pip install -e ".[dev]"
 $env:SCREENING_DATABASE_URL = "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker"
 $env:SCREENING_RECRUITER_TOKENS = '{"local-dev-token":"local-recruiter"}'
 psql $env:SCREENING_DATABASE_URL -f db/schema.sql
+psql $env:SCREENING_DATABASE_URL -f db/migrations/001_campaign_directory.sql
 candidate-screening-api --reload
 ```
 
 The ranking database must already contain `candidates`, `jobs`, `job_profile_versions`,
 `ranking_runs`, and `ranking_results`. Run the screening migration after the upstream schema.
 `db/schema.sql` owns only screening tables. The service uses a bounded psycopg connection pool.
+The campaign-directory migration adds an index for recent campaigns; apply it to existing
+databases as well as new installations.
 
 The local bearer-token map is a development identity adapter. A production deployment must replace
 it with the organization's authenticated recruiter principal. Candidate routes use the unique link

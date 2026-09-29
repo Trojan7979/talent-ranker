@@ -6,6 +6,7 @@ import { CampaignPage } from "./CampaignPage";
 import { CandidatePage } from "./CandidatePage";
 import { RecruiterLayout } from "./RecruiterLayout";
 import { SavedRunsPage } from "./SavedRunsPage";
+import { CampaignsPage } from "./CampaignsPage";
 import "./styles.css";
 
 function SavedRunRoute() {
@@ -20,6 +21,7 @@ createRoot(document.getElementById("root") as HTMLElement).render(
         <Route path="/" element={<Navigate to="/ranking" replace />} />
         <Route path="/ranking" element={<RankingPage />} />
         <Route path="/shortlists" element={<SavedRunsPage />} />
+        <Route path="/screening/campaigns" element={<CampaignsPage />} />
         <Route path="/jobs/:jobId/ranking-runs/:runId" element={<SavedRunRoute />} />
         <Route path="/screening/campaigns/:campaignId" element={<CampaignPage />} />
       </Route>

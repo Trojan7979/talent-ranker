@@ -1,12 +1,14 @@
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from psycopg.errors import UniqueViolation
 
 from .auth import recruiter_actor
 from .campaigns import (
     ApproveCampaignRequest,
+    CampaignDirectory,
     CampaignResponse,
     ContactRequest,
     ContactResponse,
@@ -82,6 +84,21 @@ def propose_campaign(details: CreateCampaignRequest, actor: Actor, request: Requ
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/campaigns", response_model=CampaignDirectory)
+def list_campaigns(
+    actor: Actor,
+    request: Request,
+    job_id: str | None = Query(default=None, min_length=1),
+    before_created_at: datetime | None = None,
+    before_id: UUID | None = None,
+    limit: int = Query(default=25, ge=1, le=100),
+) -> CampaignDirectory:
+    if (before_created_at is None) != (before_id is None):
+        raise HTTPException(status_code=422, detail="both cursor fields are required")
+    page = request.app.state.repo.list_campaigns(job_id, before_created_at, before_id, limit)
+    return CampaignDirectory.model_validate(page)
 
 
 @router.get("/campaigns/{campaign_id}", response_model=CampaignResponse)

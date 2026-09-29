@@ -7,6 +7,7 @@ export function RecruiterLayout() {
       <nav className="recruiter-nav" aria-label="Recruiter navigation">
         <NavLink to="/ranking">Ranking</NavLink>
         <NavLink to="/shortlists">Saved shortlists</NavLink>
+        <NavLink to="/screening/campaigns">Screening campaigns</NavLink>
       </nav>
       <Outlet />
     </>

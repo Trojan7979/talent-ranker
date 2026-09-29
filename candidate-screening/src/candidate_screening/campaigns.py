@@ -83,3 +83,18 @@ class CampaignResponse(BaseModel):
     approved_by: str | None
     approved_at: datetime | None
     created_at: datetime
+
+
+class CampaignSummary(BaseModel):
+    id: UUID
+    job_id: str
+    ranking_run_id: UUID
+    status: Literal["proposed", "approved", "rejected"]
+    created_at: datetime
+    candidate_count: int
+
+
+class CampaignDirectory(BaseModel):
+    items: list[CampaignSummary]
+    next_before_created_at: datetime | None
+    next_before_id: UUID | None

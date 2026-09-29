@@ -8,6 +8,7 @@ from psycopg_pool import ConnectionPool
 
 from .approval_store import ApprovalStoreMixin
 from .batch_read import BatchReadMixin
+from .campaign_directory import CampaignDirectoryMixin
 from .campaign_store import CampaignStoreMixin
 from .delivery_store import DeliveryStoreMixin
 from .oauth_store import OAuthStateStoreMixin
@@ -18,6 +19,7 @@ from .review_store import ReviewStoreMixin
 
 class PostgresRepository(
     ApprovalStoreMixin,
+    CampaignDirectoryMixin,
     CampaignStoreMixin,
     DeliveryStoreMixin,
     ResponseStoreMixin,
