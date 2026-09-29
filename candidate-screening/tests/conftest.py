@@ -57,6 +57,11 @@ def client():
                        (run_id uuid, candidate_id text, rank integer, score double precision)"""
                 )
                 cur.execute(migration.read_text(encoding="utf-8"))
+                cur.execute(
+                    (migration.parent / "migrations" / "002_uncertain_delivery.sql").read_text(
+                        encoding="utf-8"
+                    )
+                )
                 cur.execute("INSERT INTO jobs VALUES ('job-1')")
                 cur.execute(
                     """INSERT INTO job_profile_versions VALUES

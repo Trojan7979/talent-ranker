@@ -200,6 +200,7 @@ Use a new PowerShell terminal from the repository root:
 .\.venv\Scripts\Activate.ps1
 psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/schema.sql
 psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/migrations/001_campaign_directory.sql
+psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/migrations/002_uncertain_delivery.sql
 sieve-api --reload
 ```
 
@@ -277,8 +278,8 @@ sieve-worker
 
 Use `sieve-worker --once` to process one bounded batch. The dispatch endpoint also starts an
 immediate background attempt for interactive use; the worker recovers queued work independently.
-Keep only a trusted sender configuration in this process. A send whose provider outcome is unknown
-still needs reconciliation before production use; an outbox lease alone cannot prove it was not sent.
+Keep only a trusted sender configuration in this process. Transport errors and expired send leases
+now move invitations to `unknown`; they require operator reconciliation before another send.
 
 Use another PowerShell terminal:
 

@@ -43,7 +43,7 @@ class InviteActivity(BaseModel):
     invite_id: UUID
     candidate_id: str
     recipient_email: str
-    delivery_status: Literal["pending", "processing", "sent", "failed", "cancelled"]
+    delivery_status: Literal["pending", "processing", "sent", "failed", "unknown", "cancelled"]
     status: Literal["sent", "opened", "started", "completed", "expired", "declined"] | None
     sent_at: datetime | None
     opened_at: datetime | None

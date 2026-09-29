@@ -53,7 +53,7 @@ def test_dispatch_sends_each_queued_link_once(client):
 
 
 @pytest.mark.integration
-def test_provider_failure_retries_same_token_and_respects_contact_revocation(client):
+def test_provider_error_holds_invitation_without_automatic_resend(client):
     approved_campaign(client)
 
     class FailingSender:
@@ -63,17 +63,32 @@ def test_provider_failure_retries_same_token_and_respects_contact_revocation(cli
     repo = client.app.state.repo
     assert InitialInviteDispatcher(repo, FailingSender()).run_once()["failed"] == 2
     with repo.connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT body FROM screening_delivery_outbox ORDER BY id")
-        original_bodies = {row["body"] for row in cur.fetchall()}
-        cur.execute("UPDATE screening_delivery_outbox SET next_attempt_at=now()")
+        cur.execute("SELECT status,last_error FROM screening_delivery_outbox")
+        assert all(
+            row == {"status": "unknown", "last_error": "OSError"} for row in cur.fetchall()
+        )
+    sender = FakeEmailSender()
+    assert InitialInviteDispatcher(repo, sender).run_once()["sent"] == 0
+    assert sender.sent == []
+
+
+@pytest.mark.integration
+def test_expired_send_lease_is_held_for_reconciliation(client):
+    approved_campaign(client)
+    repo = client.app.state.repo
+    assert len(repo.claim_due(1)) == 1
+    with repo.connection() as conn, conn.cursor() as cur:
         cur.execute(
-            "UPDATE screening_contacts SET contactable=false WHERE candidate_id='CAND_0003'"
+            "UPDATE screening_delivery_outbox SET leased_until=now()-interval '1 minute' "
+            "WHERE status='processing'"
         )
     sender = FakeEmailSender()
     assert InitialInviteDispatcher(repo, sender).run_once()["sent"] == 1
     assert len(sender.sent) == 1
-    assert sender.sent[0][2] in original_bodies
-    assert sender.sent[0][0] == "cand_0001@example.test"
+    with repo.connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT status,last_error FROM screening_delivery_outbox")
+        rows = cur.fetchall()
+    assert sum(row["status"] == "unknown" and row["last_error"] == "send_lease_expired" for row in rows) == 1
 
 
 @pytest.mark.integration

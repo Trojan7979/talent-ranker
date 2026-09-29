@@ -28,9 +28,7 @@ class InitialInviteDispatcher:
                     str(message["id"]),
                 )
             except (OSError, RuntimeError, smtplib.SMTPException) as error:
-                self.repo.mark_delivery_failed(
-                    message["id"], type(error).__name__, message["attempts"]
-                )
+                self.repo.mark_delivery_unknown(message["id"], type(error).__name__)
                 counts["failed"] += 1
             else:
                 self.repo.mark_delivered(message["id"], receipt)

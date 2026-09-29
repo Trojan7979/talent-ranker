@@ -14,6 +14,12 @@ class DeliveryStoreMixin:
         now = datetime.now(UTC)
         with self.connection() as conn, conn.transaction(), conn.cursor() as cur:
             cur.execute(
+                """UPDATE screening_delivery_outbox
+                   SET status='unknown',leased_until=NULL,last_error='send_lease_expired'
+                   WHERE status='processing' AND leased_until <= %s""",
+                (now,),
+            )
+            cur.execute(
                 """SELECT o.id FROM screening_delivery_outbox o
                    JOIN screening_invites i ON i.id=o.invite_id
                    JOIN candidates c ON c.candidate_id=i.candidate_id
@@ -21,11 +27,10 @@ class DeliveryStoreMixin:
                    WHERE o.attempts < %s AND i.status IS NULL AND i.expires_at > %s
                      AND (%s::uuid IS NULL OR i.campaign_id=%s::uuid)
                      AND c.deleted_at IS NULL AND sc.contactable
-                     AND ((o.status IN ('pending','failed') AND o.next_attempt_at <= %s)
-                       OR (o.status='processing' AND o.leased_until <= %s))
+                     AND o.status IN ('pending','failed') AND o.next_attempt_at <= %s
                    ORDER BY o.next_attempt_at,o.id LIMIT %s
                    FOR UPDATE OF o SKIP LOCKED""",
-                (max_attempts, now, campaign_id, campaign_id, now, now, limit),
+                (max_attempts, now, campaign_id, campaign_id, now, limit),
             )
             ids = [row["id"] for row in cur.fetchall()]
             if not ids:
@@ -71,15 +76,13 @@ class DeliveryStoreMixin:
                 (now, row["invite_id"], now),
             )
 
-    def mark_delivery_failed(self, outbox_id: UUID, error_code: str, attempts: int) -> None:
-        backoff = min(3600, 2 ** min(attempts, 10) * 30)
+    def mark_delivery_unknown(self, outbox_id: UUID, error_code: str) -> None:
         with self.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """UPDATE screening_delivery_outbox
-                   SET status='failed',leased_until=NULL,last_error=%s,
-                       next_attempt_at=%s
+                   SET status='unknown',leased_until=NULL,last_error=%s
                    WHERE id=%s AND status='processing'""",
-                (error_code[:100], datetime.now(UTC) + timedelta(seconds=backoff), outbox_id),
+                (error_code[:100], outbox_id),
             )
 
     def cancel_delivery(self, outbox_id: UUID) -> None:
