@@ -192,19 +192,31 @@ SSL: disabled for local development
 Open a query editor for that connection and run the same SQL. Displaying a few dimensions with
 `subvector` is more useful than rendering all 384 values.
 
-## 8. Start The FastAPI Backend
+## 8. Start The Combined FastAPI Backend
 
 Use a new PowerShell terminal from the repository root:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-uvicorn talent_ranker.api:app --reload --host 127.0.0.1 --port 8000
+psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/schema.sql
+psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/migrations/001_campaign_directory.sql
+sieve-api --reload
 ```
+
+The screening schema is safe to reapply. The root environment must include `SCREENING_DATABASE_URL`
+pointing to the same database as `TALENT_RANKER_DATABASE_URL`, and
+`SCREENING_RECRUITER_TOKENS` for recruiter pages. For local candidate links, set
+`SCREENING_PUBLIC_BASE_URL=http://127.0.0.1:5173/s`. For Gmail sender connection on this
+combined API, set `SCREENING_GMAIL_WEB_REDIRECT_URI` to
+`http://127.0.0.1:8000/api/screening/oauth/gmail/callback` and register that exact URI in the
+Google OAuth client. File paths in screening settings are resolved from the repository root.
 
 Open:
 
-- Health check: `http://127.0.0.1:8000/health`
-- Interactive API documentation: `http://127.0.0.1:8000/docs`
+- Ranking health: `http://127.0.0.1:8000/api/ranking/health`
+- Screening health: `http://127.0.0.1:8000/api/health`
+- Ranking API docs: `http://127.0.0.1:8000/api/ranking/docs`
+- Screening API docs: `http://127.0.0.1:8000/api/docs`
 
 Create a calibration draft after creating `job.txt`:
 
@@ -215,7 +227,7 @@ $request = @{
 } | ConvertTo-Json
 
 $profile = Invoke-RestMethod `
-  -Uri http://127.0.0.1:8000/jobs/calibrate `
+  -Uri http://127.0.0.1:8000/api/ranking/jobs/calibrate `
   -Method Post `
   -ContentType "application/json" `
   -Body $request
@@ -226,7 +238,7 @@ Review or edit `$profile.priorities`, then approve the version and rank candidat
 ```powershell
 $approval = @{ approved_by = "recruiter@example.com" } | ConvertTo-Json
 $profile = Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/job-profiles/$($profile.profile_version_id)/approve" `
+  -Uri "http://127.0.0.1:8000/api/ranking/job-profiles/$($profile.profile_version_id)/approve" `
   -Method Post `
   -ContentType "application/json" `
   -Body $approval
@@ -238,7 +250,7 @@ $rankRequest = @{
 } | ConvertTo-Json
 
 $response = Invoke-RestMethod `
-  -Uri http://127.0.0.1:8000/rank `
+  -Uri http://127.0.0.1:8000/api/ranking/rank `
   -Method Post `
   -ContentType "application/json" `
   -Body $rankRequest
@@ -250,7 +262,7 @@ Use the returned `run_id` and a candidate ID to retrieve the evidence saved for 
 
 ```powershell
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/ranking-runs/$($response.run_id)/candidates/CAND_0001/evidence" `
+  -Uri "http://127.0.0.1:8000/api/ranking/ranking-runs/$($response.run_id)/candidates/CAND_0001/evidence" `
   -Method Get
 ```
 
@@ -264,7 +276,8 @@ npm install
 npm run dev -- --host 127.0.0.1
 ```
 
-Open `http://127.0.0.1:5173`. Vite forwards ranking requests through `/api/ranking` to port 8000 and screening requests through `/api/screening` to port 8001, so the browser uses one origin during development.
+Open `http://127.0.0.1:5173`. Vite forwards both ranking and screening requests to the
+combined API on port 8000; the browser uses the frontend origin during development.
 
 ## 10. Stop Local Services
 
