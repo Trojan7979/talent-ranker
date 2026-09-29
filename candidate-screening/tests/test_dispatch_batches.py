@@ -37,5 +37,5 @@ def test_campaign_dispatch_drains_more_than_one_claim_without_duplicate_mail():
     counts = InitialInviteDispatcher(repo, sender).run_campaign(uuid4(), 205)
 
     assert counts == {"sent": 205, "failed": 0, "cancelled": 0}
-    assert repo.claim_sizes == [100, 100, 5]
+    assert repo.claim_sizes == [1] * 205
     assert len(set(repo.delivered)) == len(sender.sent) == 205

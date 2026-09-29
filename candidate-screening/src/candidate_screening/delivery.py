@@ -11,7 +11,11 @@ class InitialInviteDispatcher:
 
     def run_once(self, limit: int = 100, campaign_id: UUID | None = None) -> dict[str, int]:
         counts = {"sent": 0, "failed": 0, "cancelled": 0}
-        for message in self.repo.claim_due(limit, campaign_id=campaign_id):
+        for _ in range(limit):
+            claimed = self.repo.claim_due(1, campaign_id=campaign_id)
+            if not claimed:
+                break
+            message = claimed[0]
             if not self.repo.delivery_still_valid(message["id"]):
                 self.repo.cancel_delivery(message["id"])
                 counts["cancelled"] += 1
