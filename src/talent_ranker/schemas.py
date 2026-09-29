@@ -132,6 +132,20 @@ class SavedRunPage(BaseModel):
     next_after_rank: int | None
 
 
+class SavedRunSummary(BaseModel):
+    run_id: UUID
+    job_id: str
+    job_profile_version_id: UUID | None
+    created_at: datetime
+    total_count: int
+
+
+class SavedRunDirectory(BaseModel):
+    items: list[SavedRunSummary]
+    next_before_created_at: datetime | None
+    next_before_run_id: UUID | None
+
+
 class CandidateEvidenceResponse(BaseModel):
     run_id: str
     job_id: str

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Query
@@ -21,6 +22,7 @@ from .schemas import (
     JobProfileResponse,
     RankRequest,
     RankResponse,
+    SavedRunDirectory,
     SavedRunPage,
     UpdateJobProfileRequest,
 )
@@ -148,6 +150,28 @@ def approve_job_profile(
     if profile is None:
         raise HTTPException(status_code=409, detail="job profile is no longer approvable")
     return JobProfileResponse.model_validate(profile)
+
+
+@app.get(
+    "/ranking-runs",
+    response_model=SavedRunDirectory,
+    operation_id="list_saved_ranking_runs",
+)
+def list_saved_ranking_runs(
+    job_id: str | None = Query(default=None, min_length=1),
+    before_created_at: datetime | None = None,
+    before_run_id: UUID | None = None,
+    limit: int = Query(default=25, ge=1, le=100),
+) -> SavedRunDirectory:
+    if (before_created_at is None) != (before_run_id is None):
+        raise HTTPException(status_code=422, detail="both cursor fields are required")
+    page = app.state.pipeline.repo.list_saved_runs(
+        job_id,
+        before_created_at,
+        str(before_run_id) if before_run_id else None,
+        limit,
+    )
+    return SavedRunDirectory.model_validate(page)
 
 
 @app.get(

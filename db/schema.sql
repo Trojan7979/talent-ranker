@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS ranking_runs (
 
 CREATE INDEX IF NOT EXISTS ranking_runs_profile_version_idx
   ON ranking_runs(job_profile_version_id);
+CREATE INDEX IF NOT EXISTS ranking_runs_recent_idx
+  ON ranking_runs(created_at DESC, run_id DESC);
+CREATE INDEX IF NOT EXISTS ranking_runs_job_recent_idx
+  ON ranking_runs(job_id, created_at DESC, run_id DESC);
 
 CREATE TABLE IF NOT EXISTS ranking_results (
     run_id uuid NOT NULL REFERENCES ranking_runs(run_id) ON DELETE CASCADE,

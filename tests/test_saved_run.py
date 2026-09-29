@@ -1,6 +1,7 @@
 """Saved shortlist pagination against the upstream Postgres schema."""
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -9,7 +10,7 @@ import psycopg
 import pytest
 from fastapi import HTTPException
 
-from talent_ranker.api import app, get_saved_ranking_run
+from talent_ranker.api import app, get_saved_ranking_run, list_saved_ranking_runs
 from talent_ranker.repository import PostgresRepository
 
 RUN_ID = UUID("66666666-6666-6666-6666-666666666666")
@@ -67,8 +68,39 @@ def test_saved_run_pages_skip_deleted_candidates_and_keep_rank_cursor():
             assert first.next_after_rank == 1
             assert [item.candidate_id for item in second.items] == ["CAND_0003"]
             assert second.next_after_rank is None
+
+            created_at = datetime(2026, 9, 29, tzinfo=UTC)
+            newer_id = UUID("77777777-7777-7777-7777-777777777777")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE ranking_runs SET created_at=%s WHERE run_id=%s",
+                    (created_at, RUN_ID),
+                )
+                cur.execute(
+                    """INSERT INTO ranking_runs
+                       (run_id,job_id,job_profile_version_id,jd_text,model_versions,
+                        scoring_config,created_at)
+                       VALUES (%s,'job-1',%s,'Mock role','{}','{}',%s)""",
+                    (newer_id, PROFILE_ID, created_at),
+                )
+            directory = list_saved_ranking_runs(None, None, None, 1)
+            assert [item.run_id for item in directory.items] == [newer_id]
+            assert directory.items[0].total_count == 0
+            older = list_saved_ranking_runs(
+                "job-1", directory.next_before_created_at, directory.next_before_run_id, 1
+            )
+            assert [item.run_id for item in older.items] == [RUN_ID]
+            assert older.items[0].total_count == 2
+            assert older.next_before_run_id is None
+            assert list_saved_ranking_runs("other-job", None, None, 1).items == []
             with pytest.raises(HTTPException) as error:
                 get_saved_ranking_run(uuid4(), after_rank=0, limit=1)
             assert error.value.status_code == 404
         finally:
             conn.rollback()
+
+
+def test_saved_run_directory_requires_both_cursor_fields():
+    with pytest.raises(HTTPException) as error:
+        list_saved_ranking_runs(None, datetime(2026, 9, 29, tzinfo=UTC), None, 25)
+    assert error.value.status_code == 422

@@ -22,6 +22,22 @@ export type SavedRunPage = {
   next_after_rank: number | null;
 };
 
+export type SavedRunSummary = {
+  run_id: string;
+  job_id: string;
+  job_profile_version_id: string | null;
+  created_at: string;
+  total_count: number;
+};
+
+export type SavedRunDirectory = {
+  items: SavedRunSummary[];
+  next_before_created_at: string | null;
+  next_before_run_id: string | null;
+};
+
+export type SavedRunCursor = { createdAt: string; runId: string };
+
 export type HiringPriorities = {
   must_have_skills: string[];
   preferred_skills: string[];
@@ -127,6 +143,21 @@ export async function getSavedRun(
     signal,
   });
   return parseResponse(response, "Saved shortlist");
+}
+
+export async function listSavedRuns(
+  jobId: string | null,
+  cursor: SavedRunCursor | null,
+  signal?: AbortSignal,
+): Promise<SavedRunDirectory> {
+  const query = new URLSearchParams({ limit: "25" });
+  if (jobId) query.set("job_id", jobId);
+  if (cursor) {
+    query.set("before_created_at", cursor.createdAt);
+    query.set("before_run_id", cursor.runId);
+  }
+  const response = await fetch(`${apiBaseUrl}/ranking-runs?${query}`, { signal });
+  return parseResponse(response, "Saved shortlists");
 }
 
 export async function getJobProfile(profileVersionId: string): Promise<JobProfile> {

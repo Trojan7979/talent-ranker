@@ -1,0 +1,20 @@
+.recruiter-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #d9deea;
+  background: #fff;
+}
+
+.recruiter-nav a {
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #2458d3;
+  text-decoration: none;
+}
+
+.recruiter-nav a:hover,
+.recruiter-nav a[aria-current="page"] {
+  background: #e9efff;
+}
