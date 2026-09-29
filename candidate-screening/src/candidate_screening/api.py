@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+from contextlib import ExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -12,6 +12,7 @@ from .repository import PostgresRepository
 from .review_api import router as review_router
 from .schemas import HealthResponse
 from .sender_oauth_api import router as sender_oauth_router
+from .workflow_api import router as workflow_router
 
 
 def create_app(repository=None, settings: Settings | None = None, gmail_web_oauth=None) -> FastAPI:
@@ -21,11 +22,19 @@ def create_app(repository=None, settings: Settings | None = None, gmail_web_oaut
     async def lifespan(app: FastAPI):
         owned = repository is None
         app.state.repo = repository or PostgresRepository(settings.database_url)
-        try:
-            yield
-        finally:
-            if owned:
-                app.state.repo.close()
+        with ExitStack() as stack:
+            if settings.workflow_enabled:
+                from langgraph.checkpoint.postgres import PostgresSaver
+                from sieve_app.workflow import CampaignWorkflow
+
+                checkpointer = stack.enter_context(PostgresSaver.from_conn_string(settings.database_url))
+                checkpointer.setup()
+                app.state.workflow = CampaignWorkflow(app.state.repo, checkpointer)
+            try:
+                yield
+            finally:
+                if owned:
+                    app.state.repo.close()
 
     app = FastAPI(title="Candidate Screening API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -36,6 +45,7 @@ def create_app(repository=None, settings: Settings | None = None, gmail_web_oaut
     app.include_router(dispatch_router)
     app.include_router(batch_router)
     app.include_router(sender_oauth_router)
+    app.include_router(workflow_router)
 
     @app.get("/health", response_model=HealthResponse, operation_id="screening_health")
     def health() -> HealthResponse:

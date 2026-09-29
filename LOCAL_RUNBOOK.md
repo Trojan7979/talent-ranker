@@ -211,6 +211,11 @@ pointing to the same database as `TALENT_RANKER_DATABASE_URL`, and
 combined API, set `SCREENING_GMAIL_WEB_REDIRECT_URI` to
 `http://127.0.0.1:8000/api/screening/oauth/gmail/callback` and register that exact URI in the
 Google OAuth client. File paths in screening settings are resolved from the repository root.
+Set `SCREENING_WORKFLOW_ENABLED=true` to enable the first, read-only LangGraph observer. It stores
+campaign IDs, revisions and statuses in PostgreSQL checkpoints. An authenticated recruiter can
+`POST /api/screening/campaigns/{id}/workflow/sync` after proposal or approval, then read
+`GET /api/screening/campaigns/{id}/workflow`. Approval and sending still use their existing
+domain endpoints; the observer currently requires an explicit sync call.
 
 Open:
 

@@ -27,3 +27,4 @@ class Settings(BaseSettings):
     gmail_web_redirect_uri: str = "http://127.0.0.1:8001/screening/oauth/gmail/callback"
     frontend_base_url: str = "http://127.0.0.1:5173"
     recruiter_tokens: dict[str, str] = Field(default_factory=dict)
+    workflow_enabled: bool = False
