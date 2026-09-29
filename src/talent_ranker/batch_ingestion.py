@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .identifiers import validate_candidate_id
-from .storage import CanonicalObjectStore, DriveFile, GoogleDriveStore, store_canonical_resume
+from .storage import CanonicalObjectStore, ClientStorageAdapter, DriveFile, store_canonical_resume
 
 
 class ResumePipeline(Protocol):
@@ -22,10 +22,14 @@ class ResumePipeline(Protocol):
     ) -> None: ...
 
 
+class FolderSource(ClientStorageAdapter, Protocol):
+    def list_pdfs(self, folder: str) -> list[DriveFile]: ...
+
+
 @dataclass(frozen=True)
 class ManifestEntry:
     candidate_id: str
-    drive_file_id: str
+    object_id: str
     metadata: dict = field(default_factory=dict)
 
 
@@ -38,11 +42,11 @@ class BatchReport:
     failures: list[str] = field(default_factory=list)
 
 
-def write_drive_inventory(files: list[DriveFile], output: Path) -> None:
+def write_inventory(files: list[DriveFile], output: Path, id_column: str) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "candidate_id",
-        "drive_file_id",
+        id_column,
         "file_name",
         "modified_time",
         "md5_checksum",
@@ -56,7 +60,7 @@ def write_drive_inventory(files: list[DriveFile], output: Path) -> None:
             writer.writerow(
                 {
                     "candidate_id": "",
-                    "drive_file_id": item.file_id,
+                    id_column: item.file_id,
                     "file_name": item.name,
                     "modified_time": item.modified_time,
                     "md5_checksum": item.md5_checksum,
@@ -66,27 +70,31 @@ def write_drive_inventory(files: list[DriveFile], output: Path) -> None:
             )
 
 
-def read_manifest(path: Path) -> list[ManifestEntry]:
+def write_drive_inventory(files: list[DriveFile], output: Path) -> None:
+    write_inventory(files, output, "drive_file_id")
+
+
+def read_manifest(path: Path, id_column: str = "drive_file_id") -> list[ManifestEntry]:
     entries: list[ManifestEntry] = []
     candidate_ids: set[str] = set()
     file_ids: set[str] = set()
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
-        required = {"candidate_id", "drive_file_id"}
+        required = {"candidate_id", id_column}
         if not reader.fieldnames or not required.issubset(reader.fieldnames):
-            raise ValueError("manifest requires candidate_id and drive_file_id columns")
+            raise ValueError(f"manifest requires candidate_id and {id_column} columns")
         for row_number, row in enumerate(reader, 2):
             raw_candidate_id = (row.get("candidate_id") or "").strip()
-            file_id = (row.get("drive_file_id") or "").strip()
+            file_id = (row.get(id_column) or "").strip()
             if not raw_candidate_id:
                 continue
             candidate_id = validate_candidate_id(raw_candidate_id)
             if not file_id:
-                raise ValueError(f"manifest row {row_number} has no drive_file_id")
+                raise ValueError(f"manifest row {row_number} has no {id_column}")
             if candidate_id in candidate_ids:
                 raise ValueError(f"manifest has duplicate candidate ID {candidate_id}")
             if file_id in file_ids:
-                raise ValueError(f"manifest has duplicate Drive file ID {file_id}")
+                raise ValueError(f"manifest has duplicate {id_column} {file_id}")
             metadata_text = (row.get("metadata_json") or "").strip()
             try:
                 metadata = json.loads(metadata_text) if metadata_text else {}
@@ -100,26 +108,28 @@ def read_manifest(path: Path) -> list[ManifestEntry]:
     return entries
 
 
-def ingest_drive_folder(
+def ingest_source_folder(
     pipeline: ResumePipeline,
-    store: GoogleDriveStore,
-    folder_id: str,
+    store: FolderSource,
+    folder: str,
     manifest_path: Path,
+    id_column: str,
+    source_name: str,
     progress: Callable[[str], None] | None = None,
     canonical_store: CanonicalObjectStore | None = None,
 ) -> BatchReport:
-    files = store.list_pdfs(folder_id)
+    files = store.list_pdfs(folder)
     inventory = {item.file_id: item for item in files}
-    entries = read_manifest(manifest_path)
-    mapped_file_ids = {entry.drive_file_id for entry in entries} & inventory.keys()
+    entries = read_manifest(manifest_path, id_column)
+    mapped_file_ids = {entry.object_id for entry in entries} & inventory.keys()
     report = BatchReport(len(files), len(entries), skipped=len(files) - len(mapped_file_ids))
     progress = progress or (lambda _: None)
     with tempfile.TemporaryDirectory(prefix="talent-ranker-batch-") as directory:
         for position, entry in enumerate(entries, 1):
-            item = inventory.get(entry.drive_file_id)
+            item = inventory.get(entry.object_id)
             if item is None:
                 report.failures.append(
-                    f"{entry.candidate_id}: Drive file is not a PDF in the selected folder"
+                    f"{entry.candidate_id}: {source_name} file is not a PDF in the selected folder"
                 )
                 progress(f"[{position}/{len(entries)}] failed {entry.candidate_id}")
                 continue
@@ -148,3 +158,17 @@ def ingest_drive_folder(
                 report.failures.append(f"{entry.candidate_id}: {error}")
                 progress(f"[{position}/{len(entries)}] failed {entry.candidate_id}")
     return report
+
+
+def ingest_drive_folder(
+    pipeline: ResumePipeline,
+    store: FolderSource,
+    folder_id: str,
+    manifest_path: Path,
+    progress: Callable[[str], None] | None = None,
+    canonical_store: CanonicalObjectStore | None = None,
+) -> BatchReport:
+    return ingest_source_folder(
+        pipeline, store, folder_id, manifest_path, "drive_file_id", "Drive", progress,
+        canonical_store,
+    )
