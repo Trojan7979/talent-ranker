@@ -293,11 +293,55 @@ Use another PowerShell terminal:
 ```powershell
 cd frontend
 npm install
-npm run dev -- --host 127.0.0.1
+.\node_modules\.bin\vite.cmd --host 127.0.0.1 --port 5173 --strictPort
 ```
 
 Open `http://127.0.0.1:5173`. Vite forwards both ranking and screening requests to the
 combined API on port 8000; the browser uses the frontend origin during development.
+
+## Temporary Recruiter Demo From One Shared Frontend Port
+
+The local recruiter journey starts at `/`: open **Saved shortlists**, choose a run, prepare a
+campaign, approve its recipients, then watch invitation activity and completed screenings. The
+recruiter enters a configured bearer token when preparing or opening a campaign. Start the API and
+frontend above, then share only port **5173** through a restricted HTTPS port-forward/tunnel. Vite
+proxies `/api/ranking` and `/api/screening` to the local API on port 8000. Do not share port 8000
+separately.
+
+For a remote candidate to open an invitation, obtain the tunnel hostname first and **restart the
+API before approving a new campaign** with these process environment values:
+
+```powershell
+$env:SCREENING_PUBLIC_BASE_URL="https://YOUR-DEMO-HOST/s"
+$env:SCREENING_FRONTEND_BASE_URL="https://YOUR-DEMO-HOST"
+sieve-api
+```
+
+The public link is frozen into each invitation when the recruiter approves it. Existing invitations
+with `127.0.0.1` links remain local-only. When starting Vite, allow only the exact demo hostname:
+
+```powershell
+$env:__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="YOUR-DEMO-HOST"
+cd frontend
+.\node_modules\.bin\vite.cmd --host 127.0.0.1 --port 5173 --strictPort
+```
+
+If the sender needs fresh Gmail consent through that URL, register and set
+`SCREENING_GMAIL_WEB_REDIRECT_URI=https://YOUR-DEMO-HOST/api/screening/oauth/gmail/callback`
+before starting the API. Use test recipients for a live-email rehearsal. With
+`SCREENING_SENDER_BACKEND=fake`, delivery exercises the outbox but produces no inbox message, so
+the full candidate browser journey is verified by the disposable-database test instead:
+
+```powershell
+cd candidate-screening
+$env:SCREENING_TEST_DATABASE_URL="postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker"
+..\.venv\Scripts\python.exe -m pytest tests/test_handoff_journey.py -q
+```
+
+Only use demo data through a temporary shared URL. Ranking read and write endpoints currently have
+no recruiter authentication; restrict access at the port-sharing layer and give the audience a
+demo-only recruiter token. The local `demo_run.md` pilot still describes two older API ports; this
+runbook is the current combined-port setup.
 
 ## 10. Stop Local Services
 
