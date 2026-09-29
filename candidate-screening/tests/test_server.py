@@ -12,5 +12,5 @@ def test_server_uses_configured_port(monkeypatch):
     main()
 
     assert calls == [
-        (("candidate_screening.api:app",), {"host": "127.0.0.1", "port": 8123, "reload": True})
+        (("candidate_screening.api:app",), {"host": "127.0.0.1", "port": 8123, "reload": True, "access_log": False})
     ]

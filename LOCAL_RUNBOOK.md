@@ -201,6 +201,7 @@ Use a new PowerShell terminal from the repository root:
 psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/schema.sql
 psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/migrations/001_campaign_directory.sql
 psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/migrations/002_uncertain_delivery.sql
+psql "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker" -f candidate-screening/db/migrations/003_gmail_oauth_events.sql
 sieve-api --reload
 ```
 

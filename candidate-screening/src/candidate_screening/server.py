@@ -16,6 +16,7 @@ def main() -> None:
         host="127.0.0.1",
         port=Settings().api_port,
         reload=args.reload,
+        access_log=False,  # OAuth callback URLs carry short-lived authorization codes.
     )
 
 

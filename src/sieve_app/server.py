@@ -10,7 +10,10 @@ def main() -> None:
     parser.add_argument("--reload", action="store_true")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    uvicorn.run("sieve_app.api:app", host="127.0.0.1", port=args.port, reload=args.reload)
+    uvicorn.run(
+        "sieve_app.api:app", host="127.0.0.1", port=args.port, reload=args.reload,
+        access_log=False,  # OAuth callback URLs include short-lived authorization codes.
+    )
 
 
 if __name__ == "__main__":

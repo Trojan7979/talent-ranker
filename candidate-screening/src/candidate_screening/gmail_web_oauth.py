@@ -41,7 +41,7 @@ class GmailWebOAuth:
         self._client_id()
         flow = self._flow(verifier, state)
         url, _ = flow.authorization_url(
-            access_type="offline", prompt="consent", include_granted_scopes="true", nonce=nonce
+            access_type="offline", prompt="consent", nonce=nonce
         )
         return url
 
@@ -56,9 +56,19 @@ class GmailWebOAuth:
         flow = self._flow(verifier, state)
         try:
             flow.fetch_token(code=code)
+        except Warning as warning:
+            token = getattr(warning, "token", None)
+            granted = token.get("scope", ()) if isinstance(token, dict) else ()
+            if isinstance(granted, str):
+                granted = granted.split()
+            if GMAIL_SEND_SCOPE not in granted:
+                raise ValueError("Google did not grant Gmail send permission") from warning
+            flow.oauth2session.token = dict(token)
         except (OAuth2Error, RequestException, GoogleAuthError) as error:
             raise ValueError("Google authorization could not be completed") from error
         credentials = flow.credentials
+        if credentials.granted_scopes and GMAIL_SEND_SCOPE not in credentials.granted_scopes:
+            raise ValueError("Google did not grant Gmail send permission")
         if not credentials.refresh_token or not credentials.id_token:
             raise ValueError("Google did not grant offline sender access")
         try:

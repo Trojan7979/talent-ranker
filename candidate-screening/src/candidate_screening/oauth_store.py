@@ -4,6 +4,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+OAUTH_STATE_TTL = timedelta(minutes=30)
+
 
 class OAuthStateStoreMixin:
     def save_oauth_state(
@@ -12,11 +14,26 @@ class OAuthStateStoreMixin:
         with self.connection() as conn, conn.cursor() as cur:
             cur.execute("DELETE FROM screening_gmail_oauth_states WHERE expires_at < now()")
             cur.execute(
+                "DELETE FROM screening_gmail_oauth_events WHERE created_at < now() - interval '1 day'"
+            )
+            cur.execute(
                 """INSERT INTO screening_gmail_oauth_states
                    (state_hash,actor,code_verifier,nonce,campaign_id,expires_at)
                    VALUES (%s,%s,%s,%s,%s,%s)""",
                 (state_hash, actor, verifier, nonce, campaign_id,
-                 datetime.now(UTC) + timedelta(minutes=10)),
+                 datetime.now(UTC) + OAUTH_STATE_TTL),
+            )
+            cur.execute(
+                "INSERT INTO screening_gmail_oauth_events(state_hash,event) VALUES (%s,'started')",
+                (state_hash,),
+            )
+
+    def record_oauth_event(self, state_hash: str, event: str, detail: str | None = None) -> None:
+        with self.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO screening_gmail_oauth_events(state_hash,event,detail) "
+                "VALUES (%s,%s,%s)",
+                (state_hash, event, detail),
             )
 
     def consume_oauth_state(self, state_hash: str) -> dict[str, Any] | None:

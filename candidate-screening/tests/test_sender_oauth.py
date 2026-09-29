@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -5,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from conftest import headers
 
+from candidate_screening.gmail import GMAIL_SEND_SCOPE
 from candidate_screening.gmail_web_oauth import GmailWebOAuth
 
 
@@ -48,6 +50,27 @@ def test_frontend_connection_uses_one_time_state_and_never_returns_token(client,
     assert client.get("/screening/sender/gmail/status", headers=headers()).json()["connected"]
     assert client.get("/screening/oauth/gmail/callback", params={"state": state, "code": "mock-code"}).status_code == 400
     assert client.get("/screening/oauth/gmail/callback", params={"state": "wrong", "code": "mock-code"}).status_code == 400
+    with client.app.state.repo.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT event FROM screening_gmail_oauth_events "
+            "WHERE state_hash=%s ORDER BY id",
+            (hashlib.sha256(state.encode()).hexdigest(),),
+        )
+        assert [row["event"] for row in cur.fetchall()] == [
+            "started", "callback_found", "completed", "callback_missing"
+        ]
+
+
+def test_connection_state_allows_time_to_finish_google_consent(client):
+    repo = client.app.state.repo
+    repo.save_oauth_state("consent-window", "recruiter-1", "verifier", "nonce", None)
+    with repo.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT expires_at > now() + interval '25 minutes' AS valid "
+            "FROM screening_gmail_oauth_states WHERE state_hash=%s",
+            ("consent-window",),
+        )
+        assert cur.fetchone()["valid"]
 
 
 def test_web_oauth_rejects_another_google_account_before_saving(monkeypatch, tmp_path):
@@ -64,6 +87,7 @@ def test_web_oauth_rejects_another_google_account_before_saving(monkeypatch, tmp
     class Credentials:
         refresh_token = "refresh"
         id_token = "mock-id-token"
+        granted_scopes = (GMAIL_SEND_SCOPE,)
 
         def to_json(self):
             return '{"refresh_token":"refresh"}'
@@ -94,6 +118,54 @@ def test_web_oauth_rejects_another_google_account_before_saving(monkeypatch, tmp
     assert json.loads(token_file.read_text(encoding="utf-8"))["refresh_token"] == "refresh"
 
 
+def test_web_oauth_accepts_extra_google_scopes_only_with_gmail_send(monkeypatch, tmp_path):
+    from candidate_screening.config import Settings
+
+    secret_file = tmp_path / "web.json"
+    secret_file.write_text(json.dumps({"web": {"client_id": "client-id"}}), encoding="utf-8")
+    token_file = tmp_path / "sender.json"
+    oauth = GmailWebOAuth(Settings(
+        gmail_web_client_secrets_file=secret_file, gmail_token_file=token_file,
+        gmail_sender_email="expected@example.test",
+    ))
+
+    class Credentials:
+        refresh_token = "refresh"
+        id_token = "mock-id-token"
+        granted_scopes = (GMAIL_SEND_SCOPE,)
+
+        def to_json(self):
+            return '{"refresh_token":"refresh"}'
+
+    class Session:
+        token = None
+
+    class Flow:
+        oauth2session = Session()
+        credentials = Credentials()
+        scopes = (GMAIL_SEND_SCOPE, "openid", "email")
+
+        def fetch_token(self, code):
+            warning = Warning("scope changed")
+            warning.token = {"scope": list(self.scopes)}
+            raise warning
+
+    flow = Flow()
+    monkeypatch.setattr(GmailWebOAuth, "_flow", lambda self, verifier, state: flow)
+    monkeypatch.setattr("google.oauth2.id_token.verify_oauth2_token", lambda *args: {
+        "email": "expected@example.test", "email_verified": True, "nonce": "nonce",
+    })
+    assert oauth.complete("state", "verifier", "nonce", "code") == "expected@example.test"
+    assert flow.oauth2session.token == {"scope": [GMAIL_SEND_SCOPE, "openid", "email"]}
+    assert token_file.exists()
+
+    token_file.unlink()
+    flow.scopes = ("openid", "email")
+    with pytest.raises(ValueError, match="Gmail send permission"):
+        oauth.complete("state", "verifier", "nonce", "code")
+    assert not token_file.exists()
+
+
 def test_web_authorization_url_uses_fixed_callback_state_and_pkce(tmp_path):
     from candidate_screening.config import Settings
 
@@ -112,3 +184,4 @@ def test_web_authorization_url_uses_fixed_callback_state_and_pkce(tmp_path):
     assert query["access_type"] == ["offline"]
     assert query["nonce"] == ["nonce"]
     assert query["code_challenge"]
+    assert "include_granted_scopes" not in query
