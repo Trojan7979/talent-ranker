@@ -33,6 +33,7 @@ line-ending = "lf"
 [project.scripts]
 talent-ranker = "talent_ranker.cli:main"
 sieve-api = "sieve_app.server:main"
+sieve-worker = "candidate_screening.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "candidate-screening/src"]

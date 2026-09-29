@@ -268,6 +268,18 @@ Invoke-RestMethod `
 
 ## 9. Start The Frontend
 
+In another terminal, start the delivery worker after configuring a real sender. Approved invitations
+are already stored in PostgreSQL, so this process can resume queued work after an API restart:
+
+```powershell
+sieve-worker
+```
+
+Use `sieve-worker --once` to process one bounded batch. The dispatch endpoint also starts an
+immediate background attempt for interactive use; the worker recovers queued work independently.
+Keep only a trusted sender configuration in this process. A send whose provider outcome is unknown
+still needs reconciliation before production use; an outbox lease alone cannot prove it was not sent.
+
 Use another PowerShell terminal:
 
 ```powershell
