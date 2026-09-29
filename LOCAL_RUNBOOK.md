@@ -264,7 +264,7 @@ npm install
 npm run dev -- --host 127.0.0.1
 ```
 
-Open `http://127.0.0.1:5173`. The frontend calls FastAPI on `http://localhost:8000` by default.
+Open `http://127.0.0.1:5173`. Vite forwards ranking requests through `/api/ranking` to port 8000 and screening requests through `/api/screening` to port 8001, so the browser uses one origin during development.
 
 ## 10. Stop Local Services
 
