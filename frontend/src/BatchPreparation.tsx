@@ -5,9 +5,9 @@ import type { JobProfile } from "./api";
 import { batchApi } from "./batchApi";
 import type { ContactPreview, JobConfig, SelectionPreview, SelectionRule } from "./batchApi";
 import type { Campaign } from "./screeningApi";
+import { invitationMessage, roleTitleFromJobId } from "./invitationMessage";
 
 type Props = { jobId: string; runId: string; profileId: string; selectedIds: string[] };
-const messageDefault = "Complete screening: {screening_link}";
 
 function questionsFrom(profile: JobProfile) {
   const priorities = profile.priorities;
@@ -35,7 +35,8 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [rule, setRule] = useState<SelectionRule>({ kind: "top_n", value: Math.max(1, selectedIds.length) });
   const [preview, setPreview] = useState<SelectionPreview | null>(null);
-  const [message, setMessage] = useState(messageDefault);
+  const [roleTitle, setRoleTitle] = useState(() => roleTitleFromJobId(jobId));
+  const [message, setMessage] = useState(() => invitationMessage(roleTitleFromJobId(jobId)));
   const [expiry, setExpiry] = useState(48);
   const [draft, setDraft] = useState<Campaign | null>(null);
   const [busy, setBusy] = useState(false);
@@ -122,6 +123,10 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props
   const contactsReady = selectedIds.length > 0 && selectedIds.every((id) => byId.get(id)?.contactable && byId.get(id)?.email);
   const changedEmails = selectedIds.some((id) => (emails[id] ?? "").trim() !== (byId.get(id)?.email ?? ""));
   const validMessage = message.split("{screening_link}").length === 2;
+  function changeRoleTitle(value: string) {
+    if (message === invitationMessage(roleTitle)) setMessage(invitationMessage(value));
+    setRoleTitle(value);
+  }
   return <section className="screening-panel batch-preparation" aria-label="Prepare screening batch">
     <h2>Prepare screening batch</h2>
     <p className="hint">The {selectedIds.length} checked cards will be the final recipients. Nothing sends until you approve the saved campaign.</p>
@@ -169,10 +174,14 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props
       </div>
       <div className="batch-section">
         <h3>4. Save for recruiter approval</h3>
-        <label>Invitation message <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={3} /></label>
+        <label>Role title <input value={roleTitle} onChange={(event) => changeRoleTitle(event.target.value)} />
+          <span className="hint">Suggested from the job ID. Confirm the wording before sending.</span>
+        </label>
+        <label>Invitation message <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={8} /></label>
+        <button type="button" className="secondary-button" onClick={() => setMessage(invitationMessage(roleTitle))}>Use suggested message</button>
         <label>Link expiry (hours) <input type="number" min={1} max={720} value={expiry}
           onChange={(event) => setExpiry(Number(event.target.value))} /></label>
-        <button type="button" disabled={busy || !config || !preview || !contactsReady || changedEmails || !validMessage}
+        <button type="button" disabled={busy || !config || !preview || !contactsReady || changedEmails || !roleTitle.trim() || !validMessage}
           onClick={saveProposal}>Save proposed campaign</button>
         {!contactsReady && <p className="hint">Save a contactable email for every checked candidate before continuing.</p>}
         {changedEmails && <p className="hint">Save edited addresses before continuing.</p>}

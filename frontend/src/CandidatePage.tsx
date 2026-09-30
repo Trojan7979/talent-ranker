@@ -4,6 +4,8 @@ import { CandidateQuestion } from "./CandidateQuestion";
 import type { Prompt } from "./CandidateQuestion";
 import { screeningApi } from "./screeningApi";
 import type { Answers, Invite } from "./screeningApi";
+import { roleTitleFromJobId } from "./invitationMessage";
+import { formatDateTime, formatIsoDate } from "./candidateDate";
 
 function promptsFor(invite: Invite): Prompt[] {
   const questions = invite.questions;
@@ -103,27 +105,31 @@ export function CandidatePage() {
         {error && <p className="error" role="alert">{error}</p>}
         {!invite && !error && <p role="status">Loading invitation…</p>}
         {invite && <>
-          <h1>{invite.job_id}</h1>
-          <p className="hint">Link expires {new Date(invite.expires_at).toLocaleString()}</p>
-          {finished ? <section className="screening-panel"><h2>Thank you</h2><p>Your screening responses were submitted.</p></section>
+          <h1>{roleTitleFromJobId(invite.job_id)}</h1>
+          <p className="hint">Link expires {formatDateTime(invite.expires_at)}</p>
+          {finished ? <section className="screening-panel"><h2>Thank you</h2><p>Your screening responses were submitted.</p><p>You may close this window now.</p></section>
             : declined ? <section className="screening-panel"><h2>Invitation declined</h2><p>Your response was recorded.</p></section>
               : step === -1 ? <section className="screening-panel">
-                <h2>Welcome</h2><p>Confirm your qualifications, interest, availability, notice period, and expected compensation. You may leave an answer unresolved.</p>
+                <h2>Let's get to know you</h2>
+                <p>This short screening asks about your experience, interest, start date, notice period, and salary expectations. Choose "I'm not sure" where you need to; a recruiter can follow up.</p>
                 <div className="wizard-actions">
                   <button type="button" disabled={busy} onClick={start}>Start screening</button>
                   <button type="button" className="secondary-button" disabled={busy} onClick={decline}>Decline</button>
                 </div>
               </section> : <section className="screening-panel">
+                <progress className="screening-progress" value={step + 1} max={prompts.length + 1} aria-label="Screening progress" />
                 {current ? <>
                   <p className="eyebrow">Question {step + 1} of {prompts.length}</p>
                   <CandidateQuestion prompt={current} answers={answers} onChange={setAnswers} />
                   {!validAnswer(current, answers) && <p className="error">Complete the selected answer or choose Unsure.</p>}
                 </> : <>
-                  <h2>Review and submit</h2>
-                  <p>You answered {answers.qualifications.length} of {invite.questions.must_haves.length} qualifications.</p>
+                  <h2>Review your answers</h2>
+                  <p>You responded to {answers.qualifications.length} of {invite.questions.must_haves.length} experience questions. You can go back to change anything before submitting.</p>
                   <ul>
                     <li>Interest: {answers.interest ?? "Not answered"}</li>
-                    <li>Availability: {answers.availability?.earliest_start_date ?? answers.availability?.status ?? "Not answered"}</li>
+                    <li>Availability: {answers.availability?.earliest_start_date
+                      ? formatIsoDate(answers.availability.earliest_start_date)
+                      : answers.availability?.status ?? "Not answered"}</li>
                     <li>Notice: {answers.notice_period?.days !== undefined ? `${answers.notice_period.days} days` : answers.notice_period?.status ?? "Not answered"}</li>
                     <li>Expected pay: {answers.salary?.status === "answered"
                       ? `${answers.salary.minimum}–${answers.salary.maximum} ${answers.salary.currency}/${answers.salary.period}`

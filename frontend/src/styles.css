@@ -229,6 +229,7 @@ button:disabled {
 .candidate-shell h1 { margin: 0; }
 .eyebrow { color: #2458d3; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
 .question-fields { display: grid; gap: 18px; }
+.screening-progress { width: 100%; height: 9px; accent-color: #2458d3; }
 .wizard-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
 
 @media (max-width: 800px) {
