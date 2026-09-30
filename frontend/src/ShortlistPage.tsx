@@ -90,8 +90,10 @@ export function ShortlistPage() {
           </button>
           <strong aria-live="polite">{selected.size} selected</strong>
           <button type="button" disabled={!selected.size || !run.job_profile_version_id}
-            onClick={() => setPreparing(true)}>Prepare screening batch</button>
-          <span className="hint">Select the candidates to contact, then prepare the batch.</span>
+            onClick={() => setPreparing(true)}>Prepare selected candidates</button>
+          <button type="button" className="secondary-button" disabled={!run.job_profile_version_id}
+            onClick={() => setPreparing(true)}>Agent bulk selection</button>
+          <span className="hint">Choose candidates yourself or preview a rule for this saved run.</span>
         </div>
       )}
       <section className="shortlist-grid" aria-label="Ranked candidates">
@@ -112,7 +114,7 @@ export function ShortlistPage() {
       </section>
       {preparing && run?.job_profile_version_id && jobId && runId &&
         <BatchPreparation jobId={jobId} runId={runId} profileId={run.job_profile_version_id}
-          selectedIds={[...selected]} />}
+          selectedIds={[...selected]} onSelectRecipients={(ids) => setSelected(new Set(ids))} />}
       {loading && <p role="status">Loading shortlist…</p>}
       {!loading && run && candidates.length === 0 && <p>No candidates in this saved run.</p>}
       {!loading && nextCursor !== null && !error && (

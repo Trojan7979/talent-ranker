@@ -7,7 +7,10 @@ import type { ContactPreview, JobConfig, SelectionPreview, SelectionRule } from 
 import type { Campaign } from "./screeningApi";
 import { invitationMessage, roleTitleFromJobId } from "./invitationMessage";
 
-type Props = { jobId: string; runId: string; profileId: string; selectedIds: string[] };
+type Props = {
+  jobId: string; runId: string; profileId: string; selectedIds: string[];
+  onSelectRecipients: (ids: string[]) => void;
+};
 
 function questionsFrom(profile: JobProfile) {
   const priorities = profile.priorities;
@@ -24,7 +27,7 @@ function questionsFrom(profile: JobProfile) {
   };
 }
 
-export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props) {
+export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelectRecipients }: Props) {
   const navigate = useNavigate();
   const [token, setToken] = useState("");
   const [activeToken, setActiveToken] = useState("");
@@ -129,7 +132,7 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props
   }
   return <section className="screening-panel batch-preparation" aria-label="Prepare screening batch">
     <h2>Prepare screening batch</h2>
-    <p className="hint">The {selectedIds.length} checked cards will be the final recipients. Nothing sends until you approve the saved campaign.</p>
+    <p className="hint">The {selectedIds.length} candidates below will be the final recipients. Nothing sends until you approve the saved campaign.</p>
     {error && <p className="error" role="alert">{error}</p>}
     {!activeToken ? <form onSubmit={connect}>
       <label>Recruiter bearer token <input type="password" autoComplete="off" value={token}
@@ -144,7 +147,8 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props
             <button type="button" disabled={busy} onClick={createQuestions}>Save screening questions</button></>}
       </div>
       <div className="batch-section">
-        <h3>2. Preview the selection rule</h3>
+        <h3>2. Agent bulk selection or manual selection</h3>
+        <p className="hint">The rule uses scores from this saved run. Preview it, then choose whether to use its proposed recipients or keep your manual selection.</p>
         <div className="batch-controls">
           <label>Rule <select value={rule.kind} onChange={(event) => {
             const kind = event.target.value as SelectionRule["kind"];
@@ -159,7 +163,14 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props
             (rule.kind === "score_threshold" ? rule.value < 0 || rule.value > 1 : rule.value < 1 || !Number.isInteger(rule.value))}
             onClick={previewRule}>Preview</button>
         </div>
-        {preview && <p>Rule proposes {preview.matching_count} candidates: {preview.candidates.map((item) => item.candidate_id).join(", ")}. Your checked cards remain the final list.</p>}
+        {preview && <>
+          <p>Rule proposes {preview.matching_count} candidates; {preview.candidates.filter((item) => !item.has_contact).length} need contact details.</p>
+          <button type="button" className="secondary-button" disabled={busy || !preview.candidates.length}
+            onClick={() => onSelectRecipients(preview.candidates.map((item) => item.candidate_id))}>
+            Use proposed selection
+          </button>
+          <p className="hint">Previewing does not change the recipient list. You can remove candidates below before saving.</p>
+        </>}
       </div>
       <div className="batch-section">
         <h3>3. Check exact recipients</h3>
@@ -170,7 +181,12 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds }: Props
           <button type="button" className="secondary-button" disabled={busy || !emails[id]}
             onClick={() => saveContact(id)}>Save contact</button>
           <span>{byId.get(id)?.contactable ? "Contactable" : "Contact needed"}</span>
+          <button type="button" className="secondary-button" disabled={busy}
+            onClick={() => onSelectRecipients(selectedIds.filter((candidateId) => candidateId !== id))}>
+            Remove
+          </button>
         </div>)}
+        {!selectedIds.length && <p className="hint">Select cards manually or use the proposed selection above.</p>}
       </div>
       <div className="batch-section">
         <h3>4. Save for recruiter approval</h3>
