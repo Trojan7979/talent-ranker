@@ -47,6 +47,58 @@ def sent_batch(client):
 
 
 @pytest.mark.integration
+def test_same_ranking_run_can_start_fresh_campaign_without_resetting_results(client):
+    first_id, first_tokens = sent_batch(client)
+    first_token = first_tokens["CAND_0001"]
+    assert client.post(f"/screening/invites/{first_token}/started").status_code == 200
+    completed = client.post(
+        f"/screening/invites/{first_token}/complete",
+        json={"expected_revision": 0, "answers": complete_answers()},
+    )
+    assert completed.status_code == 200, completed.text
+
+    first = client.get(f"/screening/campaigns/{first_id}", headers=headers()).json()
+    proposed = client.post(
+        "/screening/campaigns",
+        headers=headers(),
+        json={
+            "job_id": first["job_id"],
+            "ranking_run_id": first["ranking_run_id"],
+            "config_id": first["config_id"],
+            "rule": first["selection_rule"],
+            "message_template": first["message_template"],
+        },
+    )
+    assert proposed.status_code == 201, proposed.text
+    second_id = proposed.json()["id"]
+    approved = client.post(
+        f"/screening/campaigns/{second_id}/approve",
+        headers=headers(), json={"expected_revision": 1},
+    )
+    assert approved.status_code == 200, approved.text
+
+    with client.app.state.repo.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT candidate_id, token, status FROM screening_invites WHERE campaign_id=%s",
+            (second_id,),
+        )
+        fresh = {row["candidate_id"]: row for row in cur.fetchall()}
+        cur.execute(
+            """SELECT o.status FROM screening_delivery_outbox o
+               JOIN screening_invites i ON i.id=o.invite_id WHERE i.campaign_id=%s""",
+            (second_id,),
+        )
+        delivery_statuses = [row["status"] for row in cur.fetchall()]
+    assert set(fresh) == set(first_tokens)
+    assert all(fresh[candidate_id]["token"] != token for candidate_id, token in first_tokens.items())
+    assert all(row["status"] is None for row in fresh.values())
+    assert delivery_statuses == ["pending"] * len(first_tokens)
+    results = client.get(f"/screening/campaigns/{first_id}/results", headers=headers())
+    assert results.status_code == 200
+    assert results.json()["items"][0]["candidate_id"] == "CAND_0001"
+
+
+@pytest.mark.integration
 def test_review_first_paginated_and_filterable(client):
     campaign_id, tokens = sent_batch(client)
     results_url = f"/screening/campaigns/{campaign_id}/results"
