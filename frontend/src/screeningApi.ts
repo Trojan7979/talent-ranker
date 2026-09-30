@@ -15,6 +15,7 @@ export type Campaign = {
 export type CompletedScreening = {
   id: string;
   candidate_id: string;
+  config_version: number;
   outcome: "proceed_to_interview" | "needs_recruiter_review" | "do_not_proceed";
   confirmed: string[];
   missing: string[];

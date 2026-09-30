@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { screeningApi } from "./screeningApi";
 import type { ActivityPage, Campaign, ReviewPage } from "./screeningApi";
@@ -6,12 +6,8 @@ import { CampaignEditor } from "./CampaignEditor";
 import { batchApi } from "./batchApi";
 import type { ContactPreview } from "./batchApi";
 import { GmailConnection } from "./GmailConnection";
-
-const outcomeLabel = {
-  proceed_to_interview: "Screening passed",
-  needs_recruiter_review: "Needs recruiter review",
-  do_not_proceed: "Do not proceed",
-};
+import { CompletedScreenings } from "./CompletedScreenings";
+import { formatDateTime } from "./candidateDate";
 
 export function CampaignPage() {
   const { campaignId } = useParams();
@@ -28,6 +24,8 @@ export function CampaignPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState(false);
+  const [questionLabels, setQuestionLabels] = useState<Record<string, string>>({});
+  const loadedConfig = useRef<string | null>(null);
 
   const refresh = useCallback(async (auth: string) => {
     if (!campaignId) return;
@@ -38,6 +36,13 @@ export function CampaignPage() {
     ]);
     const contacts = current.status === "proposed"
       ? await batchApi.contacts(current.final_candidate_ids ?? current.proposed_candidate_ids, auth) : [];
+    const version = completed.items[0]?.config_version;
+    const configKey = version ? `${current.job_id}:${version}` : null;
+    if (configKey && configKey !== loadedConfig.current) {
+      const config = await batchApi.configVersion(current.job_id, version, auth);
+      setQuestionLabels(Object.fromEntries(config.questions.must_haves.map((item) => [item.id, item.text])));
+      loadedConfig.current = configKey;
+    }
     setCampaign(current);
     setResults(completed);
     setActivity(roster);
@@ -205,43 +210,21 @@ export function CampaignPage() {
                   <div><h3>{item.candidate_id}</h3><span>{item.recipient_email}</span></div>
                   <strong>{item.status ?? "Queued"}</strong>
                   <p>Delivery: {item.delivery_status}</p>
-                  {item.opened_at && <p>Opened: {new Date(item.opened_at).toLocaleString()}</p>}
-                  {item.started_at && <p>Started: {new Date(item.started_at).toLocaleString()}</p>}
-                  {item.completed_at && <p>Completed: {new Date(item.completed_at).toLocaleString()}</p>}
+                  {item.opened_at && <p>Opened: {formatDateTime(item.opened_at)}</p>}
+                  {item.started_at && <p>Started: {formatDateTime(item.started_at)}</p>}
+                  {item.completed_at && <p>Completed: {formatDateTime(item.completed_at)}</p>}
                 </article>
               ))}
             </div>
             {activity?.items.length === 0 && <p>No invitations have been queued yet.</p>}
             {activity?.next_cursor && <p className="hint">Showing the first 200 invitations.</p>}
           </section>
-          <section className="screening-panel">
-            <h2>Completed screenings</h2>
-            <p className="hint">Refreshes every 10 seconds while this tab is visible. {lastUpdated && `Last checked ${lastUpdated.toLocaleTimeString()}.`}</p>
-            {results && <p>{results.counts.needs_recruiter_review} need review · {results.counts.proceed_to_interview} passed · {results.counts.do_not_proceed} do not proceed</p>}
-            {results && results.items.length > 0 && <div className="selection-toolbar">
-              <button type="button" className="secondary-button" onClick={() => {
-                const ids = results.items.map((item) => item.candidate_id);
-                setSelected((current) => ids.every((id) => current.has(id)) ? new Set() : new Set(ids));
-              }}>Select loaded results</button>
-              <strong>{selected.size} selected</strong>
-              <button type="button" disabled={busy || selected.size === 0} onClick={() => exportCandidates([...selected])}>Export selected XLSX</button>
-            </div>}
-            <div className="shortlist-grid">
-              {results?.items.map((item) => (
-                <article className="result-card" key={item.id}>
-                  <label className="candidate-select"><input type="checkbox" checked={selected.has(item.candidate_id)}
-                    onChange={() => toggleSelected(item.candidate_id)} />Select {item.candidate_id}</label>
-                  <div><h3>{item.candidate_id}</h3><strong>{outcomeLabel[item.outcome]}</strong></div>
-                  <p>Confirmed: {item.confirmed.join(", ") || "None"}</p>
-                  <p>Missing: {item.missing.join(", ") || "None"}</p>
-                  <p>Verify: {item.needs_verification.join(", ") || "None"}</p>
-                  <button type="button" className="secondary-button" disabled={busy} onClick={() => exportCandidates([item.candidate_id])}>Export this result</button>
-                </article>
-              ))}
-            </div>
-            {results?.items.length === 0 && <p>No completed screenings yet.</p>}
-            <p className="hint">Profile details without a structured source are blank in the workbook.</p>
-          </section>
+          <CompletedScreenings results={results} selected={selected} busy={busy}
+            lastUpdated={lastUpdated} labels={questionLabels} onToggle={toggleSelected}
+            onExport={exportCandidates} onSelectAll={() => {
+              const ids = results?.items.map((item) => item.candidate_id) ?? [];
+              setSelected((current) => ids.every((id) => current.has(id)) ? new Set() : new Set(ids));
+            }} />
         </>
       )}
     </main>

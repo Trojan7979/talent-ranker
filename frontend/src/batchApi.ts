@@ -34,6 +34,8 @@ async function request<T>(path: string, token: string, options: RequestInit = {}
 }
 
 export const batchApi = {
+  configVersion: (jobId: string, version: number, token: string) =>
+    request<JobConfig>(`/jobs/${encodeURIComponent(jobId)}/configs/${version}`, token),
   latestConfig: async (jobId: string, token: string): Promise<JobConfig | null> => {
     const response = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}/latest-config`, {
       headers: auth(token),

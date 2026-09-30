@@ -4,9 +4,11 @@ from io import BytesIO
 from typing import Any
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, Field, model_validator
+
+from .summary_labels import OUTCOME_LABELS, readable_summary
 
 
 class ExportRequest(BaseModel):
@@ -31,9 +33,9 @@ HEADERS = (
     "Current CTC",
     "Screening status",
     "Outcome",
-    "Confirmed",
-    "Missing",
-    "Needs verification",
+    "Candidate-reported",
+    "Missing answers",
+    "Recruiter follow-up",
     "Interest",
     "Earliest start date",
     "Notice period (days)",
@@ -60,7 +62,13 @@ def build_workbook(rows: list[dict[str, Any]]) -> bytes:
     for cell in sheet[1]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="2458D3")
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+    sheet.row_dimensions[1].height = 32
     for row in rows:
+        reported, missing, follow_up = readable_summary(
+            row["confirmed"], row["missing"], row["needs_verification"],
+            row.get("question_labels", {}),
+        )
         sheet.append(
             [
                 _literal(row["candidate_id"]),
@@ -72,12 +80,12 @@ def build_workbook(rows: list[dict[str, Any]]) -> bytes:
                 None,
                 None,
                 None,
-                row["status"],
-                row["outcome"],
-                _literal(", ".join(row["confirmed"])),
-                _literal(", ".join(row["missing"])),
-                _literal(", ".join(row["needs_verification"])),
-                row["interest"],
+                row["status"].capitalize(),
+                OUTCOME_LABELS[row["outcome"]],
+                _literal("\n".join(reported)),
+                _literal("\n".join(missing)),
+                _literal("\n".join(follow_up)),
+                row["interest"].replace("_", " ").capitalize() if row["interest"] else None,
                 row["earliest_start_date"],
                 row["notice_days"],
                 row["salary_minimum"],
@@ -90,11 +98,19 @@ def build_workbook(rows: list[dict[str, Any]]) -> bytes:
         )
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = f"A1:{get_column_letter(len(HEADERS))}{sheet.max_row}"
-    sheet.column_dimensions["A"].width = 20
-    sheet.column_dimensions["C"].width = 34
-    sheet.column_dimensions["K"].width = 25
-    for column in ("L", "M", "N"):
-        sheet.column_dimensions[column].width = 35
+    for index, header in enumerate(HEADERS, 1):
+        letter = get_column_letter(index)
+        sheet.column_dimensions[letter].width = min(30, max(17, len(header) + 3))
+    sheet.column_dimensions["C"].width = 36
+    for letter in ("L", "M", "N"):
+        sheet.column_dimensions[letter].width = 60
+    for cells, row in zip(sheet.iter_rows(min_row=2), rows, strict=True):
+        for cell in cells:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+        summary_lines = max(
+            len(row["confirmed"]), len(row["missing"]), len(row["needs_verification"]), 1
+        )
+        sheet.row_dimensions[cells[0].row].height = min(330, max(42, 27 * summary_lines))
     stream = BytesIO()
     book.save(stream)
     return stream.getvalue()

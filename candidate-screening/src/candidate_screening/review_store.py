@@ -7,8 +7,9 @@ from .review import ReviewQuery, decode_cursor, encode_cursor
 class ReviewStoreMixin:
     def export_completed(self, campaign_id: UUID, candidate_ids: list[str]) -> list[dict] | None:
         with self.connection() as conn, conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM screening_campaigns WHERE id=%s", (campaign_id,))
-            if cur.fetchone() is None:
+            cur.execute("SELECT config_snapshot FROM screening_campaigns WHERE id=%s", (campaign_id,))
+            campaign = cur.fetchone()
+            if campaign is None:
                 return None
             cur.execute(
                 """SELECT i.candidate_id,o.recipient_email,i.status,s.outcome,
@@ -25,6 +26,12 @@ class ReviewStoreMixin:
                 (campaign_id, candidate_ids),
             )
             rows = cur.fetchall()
+        labels = {
+            item["id"]: item["text"]
+            for item in campaign["config_snapshot"].get("must_haves", [])
+        }
+        for row in rows:
+            row["question_labels"] = labels
         if {row["candidate_id"] for row in rows} != set(candidate_ids):
             raise ValueError("selected candidates must have completed this campaign")
         return rows

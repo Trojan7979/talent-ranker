@@ -32,13 +32,17 @@ def test_selected_completed_export_has_real_workbook_and_no_invite_token(client)
     response = client.post(url, headers=headers(), json={"candidate_ids": ["CAND_0001"]})
     assert response.status_code == 200, response.text
     assert response.content.startswith(b"PK")
-    sheet = load_workbook(BytesIO(response.content), read_only=True).active
+    sheet = load_workbook(BytesIO(response.content)).active
     values = list(sheet.values)
     row = dict(zip(values[0], values[1], strict=True))
     assert len(values) == 2
     assert row["Candidate ID"] == "CAND_0001"
     assert row["Email"] == "cand_0001@example.test"
-    assert row["Outcome"] == "proceed_to_interview"
+    assert row["Outcome"] == "Ready for interview"
+    assert "Reports experience with Python" in row["Candidate-reported"]
+    assert "candidate_confirmed" not in row["Candidate-reported"]
+    assert sheet.column_dimensions["L"].width >= 60
+    assert sheet["L2"].alignment.wrap_text
     assert row["Expected salary min"] == 100000
     assert row["Currency"] == "USD"
     assert row["Name"] is None
