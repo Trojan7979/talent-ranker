@@ -11,6 +11,19 @@ export type JobConfig = {
   version: number;
   questions: { must_haves: { id: string; text: string; hard_fail_on_no: boolean }[] };
 };
+export type QuestionDraft = {
+  version: number;
+  must_haves: { id: string; text: string; hard_fail_on_no: boolean }[];
+  require_interest: boolean;
+  require_availability: boolean;
+  require_notice_period: boolean;
+  require_salary: boolean;
+  max_notice_days: number | null;
+  target_start_date: string | null;
+  salary_maximum: number | null;
+  salary_currency: string | null;
+  salary_period: "hour" | "month" | "year" | null;
+};
 
 export type ContactPreview = { candidate_id: string; email: string | null; contactable: boolean };
 export type SelectionPreview = {
@@ -34,6 +47,11 @@ async function request<T>(path: string, token: string, options: RequestInit = {}
 }
 
 export const batchApi = {
+  questionDraft: (jobId: string, profileId: string, token: string) =>
+    request<QuestionDraft>(
+      `/jobs/${encodeURIComponent(jobId)}/profiles/${encodeURIComponent(profileId)}/question-draft`,
+      token,
+    ),
   configVersion: (jobId: string, version: number, token: string) =>
     request<JobConfig>(`/jobs/${encodeURIComponent(jobId)}/configs/${version}`, token),
   latestConfig: async (jobId: string, token: string): Promise<JobConfig | null> => {
@@ -46,7 +64,7 @@ export const batchApi = {
   },
   createConfig: (jobId: string, profileId: string, version: number, questions: object, token: string) =>
     request<JobConfig>(`/jobs/${encodeURIComponent(jobId)}/configs`, token, {
-      method: "POST", body: JSON.stringify({ job_profile_version_id: profileId, questions: { version, ...questions } }),
+      method: "POST", body: JSON.stringify({ job_profile_version_id: profileId, questions: { ...questions, version } }),
     }),
   contacts: (candidateIds: string[], token: string) =>
     request<ContactPreview[]>("/contacts/lookup", token, {

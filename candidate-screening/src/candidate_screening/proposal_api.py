@@ -18,6 +18,7 @@ from .campaigns import (
     JobConfigResponse,
 )
 from .pipeline import ScreeningPipeline
+from .questions import JobQuestions, draft_questions
 from .selection import SelectionRequest, SelectionResponse
 from .workflow_api import observe_campaign
 
@@ -57,6 +58,17 @@ def create_config(job_id: str, details: CreateJobConfigRequest, actor: Actor, re
     if result is None:
         raise HTTPException(status_code=409, detail="approved job profile not found")
     return result
+
+
+@router.get("/jobs/{job_id}/profiles/{profile_id}/question-draft", response_model=JobQuestions)
+def get_question_draft(job_id: str, profile_id: UUID, actor: Actor, request: Request):
+    priorities = request.app.state.repo.approved_profile_priorities(job_id, profile_id)
+    if priorities is None:
+        raise HTTPException(status_code=404, detail="approved job profile not found")
+    try:
+        return draft_questions(priorities)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.get("/jobs/{job_id}/configs/{version}", response_model=JobConfigResponse)

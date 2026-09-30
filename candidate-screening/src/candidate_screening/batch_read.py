@@ -1,9 +1,20 @@
 """Bounded read projections for preparing a recruiter-approved batch."""
 
 from typing import Any
+from uuid import UUID
 
 
 class BatchReadMixin:
+    def approved_profile_priorities(self, job_id: str, profile_id: UUID) -> dict | None:
+        with self.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """SELECT priorities FROM job_profile_versions
+                   WHERE job_id=%s AND profile_version_id=%s AND status='approved'""",
+                (job_id, profile_id),
+            )
+            row = cur.fetchone()
+            return row["priorities"] if row else None
+
     def latest_job_config(self, job_id: str) -> dict[str, Any] | None:
         with self.connection() as conn, conn.cursor() as cur:
             cur.execute(

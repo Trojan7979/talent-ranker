@@ -1,9 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getJobProfile } from "./api";
-import type { JobProfile } from "./api";
 import { batchApi } from "./batchApi";
-import type { ContactPreview, JobConfig, SelectionPreview, SelectionRule } from "./batchApi";
+import type { ContactPreview, JobConfig, QuestionDraft, SelectionPreview, SelectionRule } from "./batchApi";
 import type { Campaign } from "./screeningApi";
 import { invitationMessage, roleTitleFromJobId } from "./invitationMessage";
 
@@ -12,26 +10,11 @@ type Props = {
   onSelectRecipients: (ids: string[]) => void;
 };
 
-function questionsFrom(profile: JobProfile) {
-  const priorities = profile.priorities;
-  const requirements = [...priorities.must_have_skills, ...priorities.must_have_requirements];
-  const pay = priorities.compensation;
-  return {
-    must_haves: requirements.map((text, index) => ({ id: `requirement-${index + 1}`, text, hard_fail_on_no: false })),
-    require_interest: true, require_availability: true, require_notice_period: true, require_salary: true,
-    max_notice_days: priorities.availability.max_notice_period_days,
-    target_start_date: priorities.availability.target_start_date,
-    ...(pay.maximum !== null && pay.currency && pay.period ? {
-      salary_maximum: pay.maximum, salary_currency: pay.currency, salary_period: pay.period,
-    } : {}),
-  };
-}
-
 export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelectRecipients }: Props) {
   const navigate = useNavigate();
   const [token, setToken] = useState("");
   const [activeToken, setActiveToken] = useState("");
-  const [profile, setProfile] = useState<JobProfile | null>(null);
+  const [questionDraft, setQuestionDraft] = useState<QuestionDraft | null>(null);
   const [latest, setLatest] = useState<JobConfig | null>(null);
   const [config, setConfig] = useState<JobConfig | null>(null);
   const [contacts, setContacts] = useState<ContactPreview[]>([]);
@@ -64,11 +47,11 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelec
     event.preventDefault();
     setBusy(true);
     try {
-      const [approvedProfile, latestConfig] = await Promise.all([
-        getJobProfile(profileId), batchApi.latestConfig(jobId, token.trim()),
+      const [draftQuestions, latestConfig] = await Promise.all([
+        batchApi.questionDraft(jobId, profileId, token.trim()),
+        batchApi.latestConfig(jobId, token.trim()),
       ]);
-      if (approvedProfile.status !== "approved") throw new Error("The saved run needs approved hiring criteria.");
-      setProfile(approvedProfile);
+      setQuestionDraft(draftQuestions);
       setLatest(latestConfig);
       setConfig(latestConfig?.job_profile_version_id === profileId ? latestConfig : null);
       setActiveToken(token.trim());
@@ -78,11 +61,11 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelec
   }
 
   async function createQuestions() {
-    if (!profile) return;
+    if (!questionDraft) return;
     setBusy(true);
     try {
       const created = await batchApi.createConfig(jobId, profileId, (latest?.version ?? 0) + 1,
-        questionsFrom(profile), activeToken);
+        questionDraft, activeToken);
       setLatest(created);
       setConfig(created);
       setError(null);
@@ -143,7 +126,7 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelec
         <h3>1. Questions for this job</h3>
         {config ? <p>Using approved question set v{config.version}: {config.questions.must_haves.map((item) => item.text).join(", ")}</p>
           : <><p>Confirm these approved must-haves with each candidate:</p>
-            <ul>{profile && questionsFrom(profile).must_haves.map((item) => <li key={item.id}>{item.text}</li>)}</ul>
+            <ul>{questionDraft?.must_haves.map((item) => <li key={item.id}>{item.text}</li>)}</ul>
             <button type="button" disabled={busy} onClick={createQuestions}>Save screening questions</button></>}
       </div>
       <div className="batch-section">

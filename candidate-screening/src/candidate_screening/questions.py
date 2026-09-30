@@ -118,3 +118,32 @@ def validate_against_approved_profile(config: JobQuestions, priorities: dict) ->
     configured = {item.text.strip().casefold() for item in config.must_haves}
     if configured != approved:
         raise ValueError("screening must-haves must match approved hiring criteria")
+
+
+def draft_questions(priorities: dict) -> JobQuestions:
+    """Draft a stable, reviewable question set from approved job criteria."""
+    labels: list[str] = []
+    seen: set[str] = set()
+    for field in ("must_have_skills", "must_have_requirements"):
+        for item in priorities.get(field, []):
+            label = item.strip()
+            if label and label.casefold() not in seen:
+                labels.append(label)
+                seen.add(label.casefold())
+    if len(labels) > 30:
+        raise ValueError("approved job has more than 30 must-haves; review the criteria first")
+    availability = priorities.get("availability") or {}
+    compensation = priorities.get("compensation") or {}
+    has_budget = all(compensation.get(key) is not None for key in ("maximum", "currency", "period"))
+    return JobQuestions(
+        version=1,
+        must_haves=[
+            MustHave(id=f"requirement-{index}", text=label)
+            for index, label in enumerate(labels, 1)
+        ],
+        max_notice_days=availability.get("max_notice_period_days"),
+        target_start_date=availability.get("target_start_date"),
+        salary_maximum=compensation["maximum"] if has_budget else None,
+        salary_currency=compensation["currency"] if has_budget else None,
+        salary_period=compensation["period"] if has_budget else None,
+    )
