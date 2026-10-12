@@ -2,10 +2,12 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listCampaigns } from "./campaignDirectoryApi";
 import type { CampaignCursor, CampaignSummary } from "./campaignDirectoryApi";
+import { useRecruiterSession } from "./RecruiterLayout";
 
 export function CampaignsPage() {
-  const [tokenInput, setTokenInput] = useState("");
-  const [token, setToken] = useState("");
+  const recruiterSession = useRecruiterSession();
+  const [tokenInput, setTokenInput] = useState(recruiterSession.token);
+  const [token, setToken] = useState(recruiterSession.token);
   const [jobInput, setJobInput] = useState("");
   const [jobFilter, setJobFilter] = useState<string | null>(null);
   const [cursor, setCursor] = useState<CampaignCursor | null>(null);
@@ -22,6 +24,7 @@ export function CampaignsPage() {
     setError(null);
     listCampaigns(token, jobFilter, cursor, controller.signal)
       .then((page) => {
+        recruiterSession.setToken(token);
         setItems((previous) => cursor ? [...previous, ...page.items] : page.items);
         setNextCursor(page.next_before_created_at && page.next_before_id
           ? { createdAt: page.next_before_created_at, id: page.next_before_id }
@@ -36,7 +39,7 @@ export function CampaignsPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [token, jobFilter, cursor, retry]);
+  }, [token, jobFilter, cursor, retry, recruiterSession.setToken]);
 
   function load(event: FormEvent) {
     event.preventDefault();

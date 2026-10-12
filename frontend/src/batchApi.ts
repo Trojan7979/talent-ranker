@@ -25,7 +25,8 @@ export type QuestionDraft = {
   salary_period: "hour" | "month" | "year" | null;
 };
 
-export type ContactPreview = { candidate_id: string; email: string | null; contactable: boolean };
+export type ContactPreview = { candidate_id: string; display_name: string | null; name_source: string | null;
+  email: string | null; contactable: boolean };
 export type SelectionPreview = {
   matching_count: number;
   candidates: { candidate_id: string; rank: number; score: number; has_contact: boolean }[];
@@ -70,6 +71,11 @@ export const batchApi = {
     request<ContactPreview[]>("/contacts/lookup", token, {
       method: "POST", body: JSON.stringify({ candidate_ids: candidateIds }),
     }),
+  setName: (candidateId: string, displayName: string, token: string) =>
+    request<{ candidate_id: string; display_name: string }>(
+      `/candidates/${encodeURIComponent(candidateId)}/name`, token, {
+        method: "PUT", body: JSON.stringify({ display_name: displayName }),
+      }),
   setContact: (candidateId: string, email: string, token: string) =>
     request<ContactPreview>(`/candidates/${encodeURIComponent(candidateId)}/contact`, token, {
       method: "PUT", body: JSON.stringify({ email, source: "recruiter-frontend", contactable: true }),

@@ -4,15 +4,18 @@ import { batchApi } from "./batchApi";
 import type { ContactPreview, JobConfig, QuestionDraft, SelectionPreview, SelectionRule } from "./batchApi";
 import type { Campaign } from "./screeningApi";
 import { invitationMessage, roleTitleFromJobId } from "./invitationMessage";
+import { useRecruiterSession } from "./RecruiterLayout";
 
 type Props = {
   jobId: string; runId: string; profileId: string; selectedIds: string[];
   onSelectRecipients: (ids: string[]) => void;
+  initialToken?: string;
 };
 
-export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelectRecipients }: Props) {
+export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelectRecipients, initialToken = "" }: Props) {
   const navigate = useNavigate();
-  const [token, setToken] = useState("");
+  const recruiterSession = useRecruiterSession();
+  const [token, setToken] = useState(initialToken || recruiterSession.token);
   const [activeToken, setActiveToken] = useState("");
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft | null>(null);
   const [latest, setLatest] = useState<JobConfig | null>(null);
@@ -55,6 +58,7 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelec
       setLatest(latestConfig);
       setConfig(latestConfig?.job_profile_version_id === profileId ? latestConfig : null);
       setActiveToken(token.trim());
+      recruiterSession.setToken(token.trim());
       setError(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not prepare batch."); }
     finally { setBusy(false); }
@@ -158,7 +162,8 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelec
       <div className="batch-section">
         <h3>3. Check exact recipients</h3>
         {selectedIds.map((id) => <div className="batch-contact" key={id}>
-          <strong>{id}</strong>
+          <strong>{byId.get(id)?.display_name || "Name needs review"}</strong>
+          <span>{id}</span>
           <input aria-label={`Email for ${id}`} type="email" value={emails[id] ?? ""}
             onChange={(event) => setEmails({ ...emails, [id]: event.target.value })} placeholder="Candidate email" />
           <button type="button" className="secondary-button" disabled={busy || !emails[id]}

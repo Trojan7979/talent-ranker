@@ -1,0 +1,16 @@
+.identity-access { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.identity-access label { min-width: 260px; }
+.candidate-record-id { display: block; color: #62708a; margin-top: 3px; }
+.name-review-button { display: block; width: auto; margin-top: 8px; padding: 0; border: 0; background: none; color: #2458d3; cursor: pointer; }
+.name-review-form { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.name-review-form label { flex: 1; min-width: 180px; }
+.source-file-list { display: grid; gap: 8px; max-height: 480px; overflow: auto; margin: 18px 0; }
+.source-file { display: grid; grid-template-columns: minmax(0, 1fr) 180px; align-items: center; gap: 12px; }
+.source-file span { overflow-wrap: anywhere; }
+.resume-source-card { grid-column: 1 / -1; display: grid; justify-items: start; gap: 8px; padding: 12px; border: 1px solid #d9deea; border-radius: 8px; overflow-wrap: anywhere; }
+.resume-source-card p { margin: 0; }
+.resume-source-card small { color: #62708a; }
+@media (max-width: 600px) {
+  .identity-access { display: grid; }
+  .source-file { grid-template-columns: 1fr; }
+}

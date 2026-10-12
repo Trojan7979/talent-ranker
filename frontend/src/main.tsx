@@ -7,7 +7,9 @@ import { CandidatePage } from "./CandidatePage";
 import { RecruiterLayout } from "./RecruiterLayout";
 import { SavedRunsPage } from "./SavedRunsPage";
 import { CampaignsPage } from "./CampaignsPage";
+import { ResumeSourcesPage } from "./ResumeSourcesPage";
 import "./styles.css";
+import "./resumeSources.css";
 
 function SavedRunRoute() {
   const { jobId, runId } = useParams();
@@ -20,6 +22,7 @@ createRoot(document.getElementById("root") as HTMLElement).render(
       <Route element={<RecruiterLayout />}>
         <Route path="/" element={<Navigate to="/ranking" replace />} />
         <Route path="/ranking" element={<RankingPage />} />
+        <Route path="/sources" element={<ResumeSourcesPage />} />
         <Route path="/shortlists" element={<SavedRunsPage />} />
         <Route path="/screening/campaigns" element={<CampaignsPage />} />
         <Route path="/jobs/:jobId/ranking-runs/:runId" element={<SavedRunRoute />} />

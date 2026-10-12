@@ -8,11 +8,13 @@ import type { ContactPreview } from "./batchApi";
 import { GmailConnection } from "./GmailConnection";
 import { CompletedScreenings } from "./CompletedScreenings";
 import { formatDateTime } from "./candidateDate";
+import { useRecruiterSession } from "./RecruiterLayout";
 
 export function CampaignPage() {
+  const recruiterSession = useRecruiterSession();
   const { campaignId } = useParams();
-  const [token, setToken] = useState("");
-  const [activeToken, setActiveToken] = useState("");
+  const [token, setToken] = useState(recruiterSession.token);
+  const [activeToken, setActiveToken] = useState(recruiterSession.token);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [results, setResults] = useState<ReviewPage | null>(null);
   const [activity, setActivity] = useState<ActivityPage | null>(null);
@@ -56,6 +58,7 @@ export function CampaignPage() {
     try {
       await refresh(token.trim());
       setActiveToken(token.trim());
+      recruiterSession.setToken(token.trim());
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not open campaign.");
@@ -63,6 +66,12 @@ export function CampaignPage() {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!activeToken) return;
+    refresh(activeToken).catch((cause: unknown) =>
+      setError(cause instanceof Error ? cause.message : "Could not open campaign."));
+  }, [activeToken, refresh]);
 
   useEffect(() => {
     if (!activeToken) return;
