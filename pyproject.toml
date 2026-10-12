@@ -21,7 +21,10 @@ dependencies = [
   "pydantic-settings>=2.6,<3",
   "pypdf>=5,<6",
   "psycopg[binary,pool]>=3.2,<4",
+  "python-docx>=1.2,<2",
   "python-multipart>=0.0.20,<1",
+  "requests>=2.31,<3",
+  "urllib3>=2.2.3,<3",
   "sentence-transformers>=3.3,<4",
   "uvicorn[standard]>=0.32,<1",
 ]
@@ -36,6 +39,8 @@ line-ending = "lf"
 talent-ranker = "talent_ranker.cli:main"
 sieve-api = "sieve_app.server:main"
 sieve-worker = "candidate_screening.worker:main"
+sieve-index-worker = "sieve_app.indexing_worker:main"
+sieve-enrichment-worker = "sieve_app.enrichment_worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "candidate-screening/src"]

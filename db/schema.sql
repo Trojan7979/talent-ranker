@@ -34,6 +34,61 @@ CREATE INDEX IF NOT EXISTS resume_chunks_embedding_hnsw_idx
   WITH (m = 16, ef_construction = 128);
 CREATE INDEX IF NOT EXISTS resume_chunks_candidate_idx ON resume_chunks(candidate_id);
 
+CREATE TABLE IF NOT EXISTS drive_oauth_states (
+    state_hash text PRIMARY KEY,
+    actor text NOT NULL,
+    code_verifier text NOT NULL,
+    nonce text NOT NULL,
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS drive_oauth_states_expiry_idx
+  ON drive_oauth_states(expires_at);
+
+CREATE TABLE IF NOT EXISTS sharepoint_ingestion_jobs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL UNIQUE,
+    folder_url text NOT NULL,
+    entries jsonb NOT NULL,
+    created_by text NOT NULL,
+    status text NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'running', 'completed', 'completed_with_errors', 'failed')),
+    discovered integer NOT NULL DEFAULT 0,
+    indexed integer NOT NULL DEFAULT 0,
+    skipped integer NOT NULL DEFAULT 0,
+    failures jsonb NOT NULL DEFAULT '[]'::jsonb,
+    attempts integer NOT NULL DEFAULT 0,
+    leased_until timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz
+);
+ALTER TABLE sharepoint_ingestion_jobs
+  ADD COLUMN IF NOT EXISTS phase text NOT NULL DEFAULT 'index';
+ALTER TABLE sharepoint_ingestion_jobs DROP CONSTRAINT IF EXISTS sharepoint_ingestion_jobs_status_check;
+ALTER TABLE sharepoint_ingestion_jobs ADD CONSTRAINT sharepoint_ingestion_jobs_status_check
+  CHECK (status IN ('pending', 'running', 'awaiting_review', 'completed', 'completed_with_errors', 'failed'));
+CREATE INDEX IF NOT EXISTS sharepoint_ingestion_jobs_claim_idx
+  ON sharepoint_ingestion_jobs (created_at)
+  WHERE status IN ('pending', 'running');
+
+CREATE TABLE IF NOT EXISTS candidate_names (
+    candidate_id text PRIMARY KEY REFERENCES candidates(candidate_id) ON DELETE CASCADE,
+    display_name text NOT NULL,
+    source text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS sharepoint_candidate_files (
+    source_uri text PRIMARY KEY,
+    candidate_id text NOT NULL REFERENCES candidates(candidate_id) ON DELETE CASCADE,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sharepoint_candidate_files_candidate_idx
+  ON sharepoint_candidate_files(candidate_id);
+CREATE TABLE IF NOT EXISTS candidate_id_allocations (
+    candidate_number integer PRIMARY KEY CHECK (candidate_number BETWEEN 1 AND 9000),
+    job_id uuid NOT NULL REFERENCES sharepoint_ingestion_jobs(id)
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     job_id text PRIMARY KEY,
     job_description text NOT NULL,
@@ -88,3 +143,27 @@ CREATE TABLE IF NOT EXISTS ranking_results (
     PRIMARY KEY(run_id, candidate_id),
     UNIQUE(run_id, rank)
 );
+-- Link discovery and a durable enrichment queue share one bounded record per URL.
+CREATE TABLE IF NOT EXISTS candidate_external_evidence (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    candidate_id text NOT NULL REFERENCES candidates(candidate_id) ON DELETE CASCADE,
+    source_sha256 text NOT NULL,
+    url text NOT NULL CHECK (length(url) <= 2048),
+    kind text NOT NULL CHECK (kind IN ('github', 'web', 'unsupported')),
+    discovered_via text NOT NULL CHECK (discovered_via IN ('text', 'hyperlink')),
+    status text NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'running', 'completed', 'failed', 'blocked', 'unsupported')),
+    attempts integer NOT NULL DEFAULT 0,
+    lease_token uuid,
+    leased_until timestamptz,
+    next_attempt_at timestamptz NOT NULL DEFAULT now(),
+    evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+    error_code text,
+    fetched_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE(candidate_id, url)
+);
+CREATE INDEX IF NOT EXISTS external_evidence_claim_idx
+  ON candidate_external_evidence(next_attempt_at, created_at)
+  WHERE status IN ('pending', 'running');

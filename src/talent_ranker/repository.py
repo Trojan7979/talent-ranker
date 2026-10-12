@@ -5,7 +5,9 @@ from collections.abc import Iterator, Sequence
 
 from .candidate_chunks import CandidateChunksRepositoryMixin
 from .documents import Chunk
+from .external_evidence import sync_resume_links
 from .job_profiles import JobProfileRepositoryMixin
+from .resume_links import ResumeLink
 from .saved_runs import SavedRunsRepositoryMixin
 
 
@@ -62,6 +64,8 @@ class PostgresRepository(
         chunks: Sequence[Chunk],
         embeddings: Sequence[Sequence[float]],
         metadata: dict | None = None,
+        *,
+        links: Sequence[ResumeLink] = (),
     ) -> None:
         with self.conn.transaction(), self.conn.cursor() as cur:
             cur.execute(
@@ -73,6 +77,7 @@ class PostgresRepository(
                 (candidate_id, source_uri, source_sha256, raw_text, json.dumps(metadata or {})),
             )
             cur.execute("DELETE FROM resume_chunks WHERE candidate_id=%s", (candidate_id,))
+            sync_resume_links(cur, candidate_id, source_sha256, links)
             cur.executemany(
                 """INSERT INTO resume_chunks
                    (candidate_id,ordinal,parent_ordinal,section,content,parent_content,

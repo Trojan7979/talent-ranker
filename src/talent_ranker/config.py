@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     calibration_timeout_seconds: float = 60.0
     google_credentials_file: str = "secrets/google-client.json"
     google_token_file: str = ".tokens/drive.json"
+    google_web_credentials_file: str = "candidate-screening/secrets/gmail-web-client.json"
+    google_web_redirect_uri: str = "http://127.0.0.1:8000/api/sources/drive/oauth/callback"
+    frontend_base_url: str = "http://127.0.0.1:5173"
+    sharepoint_tenant_id: str = ""
+    sharepoint_client_id: str = ""
+    sharepoint_client_secret: SecretStr | None = None
+    github_token: SecretStr | None = None
     canonical_storage_backend: str = "s3"
     canonical_s3_bucket: str = ""
     canonical_s3_prefix: str = "talent-ranker"

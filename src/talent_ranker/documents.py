@@ -5,7 +5,31 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from hashlib import sha256
 from itertools import pairwise
-from pathlib import Path
+
+from .resume_extraction import (
+    ExtractedResume,
+    extract_docx,
+    extract_pdf,
+    extract_resume,
+    extract_resume_document,
+    normalize_text,
+)
+
+# Preserve the existing document API while keeping extraction separate from chunking.
+__all__ = [
+    'Chunk',
+    'EvidenceUnit',
+    'ExtractedResume',
+    'canonical_heading',
+    'chunk_resume',
+    'document_hash',
+    'extract_docx',
+    'extract_evidence_units',
+    'extract_pdf',
+    'extract_resume',
+    'extract_resume_document',
+    'normalize_text',
+]
 
 Tokenize = Callable[[str], list[int]]
 Decode = Callable[[list[int]], str]
@@ -56,25 +80,6 @@ DATE_PATTERN = re.compile(
     r"\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b",
     re.IGNORECASE,
 )
-
-
-def extract_pdf(path: Path) -> str:
-    """Extract text from a digital PDF. Scanned PDFs should pass through OCR upstream."""
-    from pypdf import PdfReader
-
-    reader = PdfReader(str(path))
-    pages = [(page.extract_text() or "").strip() for page in reader.pages]
-    text = "\n\n".join(page for page in pages if page)
-    if len(text) < 80:
-        raise ValueError(f"{path} has too little extractable text; route it to OCR")
-    return normalize_text(text)
-
-
-def normalize_text(text: str) -> str:
-    text = text.replace("\x00", " ").replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
 
 
 def canonical_heading(line: str) -> str | None:

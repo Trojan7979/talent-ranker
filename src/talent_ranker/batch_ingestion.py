@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import tempfile
 from collections.abc import Callable
@@ -13,7 +14,7 @@ from .storage import CanonicalObjectStore, ClientStorageAdapter, DriveFile, stor
 
 
 class ResumePipeline(Protocol):
-    def ingest_pdf(
+    def ingest_resume(
         self,
         candidate_id: str,
         path: Path,
@@ -23,7 +24,7 @@ class ResumePipeline(Protocol):
 
 
 class FolderSource(ClientStorageAdapter, Protocol):
-    def list_pdfs(self, folder: str) -> list[DriveFile]: ...
+    def list_resumes(self, folder: str) -> list[DriveFile]: ...
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class ManifestEntry:
     candidate_id: str
     object_id: str
     metadata: dict = field(default_factory=dict)
+    expected_sha256: str | None = None
 
 
 @dataclass
@@ -118,9 +120,24 @@ def ingest_source_folder(
     progress: Callable[[str], None] | None = None,
     canonical_store: CanonicalObjectStore | None = None,
 ) -> BatchReport:
-    files = store.list_pdfs(folder)
+    return ingest_source_entries(
+        pipeline, store, folder, read_manifest(manifest_path, id_column), source_name,
+        progress, canonical_store,
+    )
+
+
+def ingest_source_entries(
+    pipeline: ResumePipeline,
+    store: FolderSource,
+    folder: str,
+    entries: list[ManifestEntry],
+    source_name: str,
+    progress: Callable[[str], None] | None = None,
+    canonical_store: CanonicalObjectStore | None = None,
+    on_result: Callable[[str, str | None], None] | None = None,
+) -> BatchReport:
+    files = store.list_resumes(folder)
     inventory = {item.file_id: item for item in files}
-    entries = read_manifest(manifest_path, id_column)
     mapped_file_ids = {entry.object_id for entry in entries} & inventory.keys()
     report = BatchReport(len(files), len(entries), skipped=len(files) - len(mapped_file_ids))
     progress = progress or (lambda _: None)
@@ -128,25 +145,37 @@ def ingest_source_folder(
         for position, entry in enumerate(entries, 1):
             item = inventory.get(entry.object_id)
             if item is None:
-                report.failures.append(
-                    f"{entry.candidate_id}: {source_name} file is not a PDF in the selected folder"
-                )
+                failure = f"{entry.candidate_id}: {source_name} file is not a resume in the selected folder"
+                report.failures.append(failure)
                 progress(f"[{position}/{len(entries)}] failed {entry.candidate_id}")
+                if on_result:
+                    on_result(entry.candidate_id, failure)
                 continue
+            failure = None
+            local = None
             try:
-                local = Path(directory) / f"{entry.candidate_id}.pdf"
+                suffix = Path(item.name).suffix.lower()
+                if suffix not in {".pdf", ".docx"}:
+                    raise ValueError("resume must be a PDF or DOCX file")
+                local = Path(directory) / f"{entry.candidate_id}{suffix}"
                 store.download(item.file_id, local)
+                if entry.expected_sha256 and (
+                    hashlib.sha256(local.read_bytes()).hexdigest() != entry.expected_sha256
+                ):
+                    raise ValueError("source resume changed since recruiter review")
                 metadata = {
                     **entry.metadata,
                     "source_file_name": item.name,
                     "source_modified_time": item.modified_time,
                     "source_md5_checksum": item.md5_checksum,
                     "client_source_uri": store.source_uri(item.file_id),
+                    "source_web_url": item.web_url,
+                    "source_etag": item.etag,
                 }
                 source_uri = store.source_uri(item.file_id)
                 if canonical_store is not None:
                     source_uri = store_canonical_resume(canonical_store, entry.candidate_id, local)
-                pipeline.ingest_pdf(
+                pipeline.ingest_resume(
                     entry.candidate_id,
                     local,
                     source_uri,
@@ -155,8 +184,14 @@ def ingest_source_folder(
                 report.indexed += 1
                 progress(f"[{position}/{len(entries)}] indexed {entry.candidate_id}")
             except Exception as error:  # noqa: BLE001 - isolate individual file failures
-                report.failures.append(f"{entry.candidate_id}: {error}")
+                failure = f"{entry.candidate_id}: {error}"
+                report.failures.append(failure)
                 progress(f"[{position}/{len(entries)}] failed {entry.candidate_id}")
+            finally:
+                if local is not None:
+                    local.unlink(missing_ok=True)
+            if on_result:
+                on_result(entry.candidate_id, failure)
     return report
 
 
@@ -171,4 +206,18 @@ def ingest_drive_folder(
     return ingest_source_folder(
         pipeline, store, folder_id, manifest_path, "drive_file_id", "Drive", progress,
         canonical_store,
+    )
+
+
+def ingest_sharepoint_folder(
+    pipeline: ResumePipeline,
+    store: FolderSource,
+    folder_url: str,
+    manifest_path: Path,
+    progress: Callable[[str], None] | None = None,
+    canonical_store: CanonicalObjectStore | None = None,
+) -> BatchReport:
+    return ingest_source_folder(
+        pipeline, store, folder_url, manifest_path, "sharepoint_file_id", "SharePoint",
+        progress, canonical_store,
     )

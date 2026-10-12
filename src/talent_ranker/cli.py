@@ -6,16 +6,22 @@ import json
 import tempfile
 from pathlib import Path
 
-from .batch_ingestion import ingest_drive_folder, write_drive_inventory
+from .batch_ingestion import (
+    ingest_drive_folder,
+    ingest_sharepoint_folder,
+    write_drive_inventory,
+    write_inventory,
+)
 from .config import SETTINGS
+from .drive_links import drive_id
 from .pipeline import RankingPipeline
 from .privacy_audit import audit_privacy
 from .repository import PostgresRepository
+from .sharepoint import SharePointFolderSource, configured_sharepoint_source
 from .storage import (
     CanonicalObjectStore,
-    FilesystemObjectStore,
     GoogleDriveStore,
-    S3ObjectStore,
+    configured_canonical_store,
     store_canonical_resume,
 )
 
@@ -53,21 +59,28 @@ def write_outputs(results, output: Path) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="talent-ranker")
     sub = parser.add_subparsers(dest="command", required=True)
-    ingest = sub.add_parser("ingest", help="Extract, chunk, embed and index a resume PDF")
+    ingest = sub.add_parser("ingest", help="Extract, chunk, embed and index a PDF or DOCX resume")
     ingest.add_argument("candidate_id")
-    ingest.add_argument("pdf", type=Path)
+    ingest.add_argument("resume", type=Path)
     ingest.add_argument("--source-uri")
     ingest.add_argument("--metadata", type=Path, help="ATS/platform metadata JSON")
-    ingest_drive = sub.add_parser("ingest-drive", help="Fetch a Google Drive PDF and index it")
+    ingest_drive = sub.add_parser("ingest-drive", help="Fetch a Google Drive PDF or DOCX and index it")
     ingest_drive.add_argument("candidate_id")
-    ingest_drive.add_argument("file_id")
+    ingest_drive.add_argument("file_id", help="Drive file link or ID")
     ingest_drive.add_argument("--metadata", type=Path, help="ATS/platform metadata JSON")
-    inventory = sub.add_parser("drive-inventory", help="Export PDFs in a Drive folder to CSV")
-    inventory.add_argument("folder_id")
+    sub.add_parser("drive-authorize", help="Connect a Google Drive account for resume intake")
+    inventory = sub.add_parser("drive-inventory", help="Export resumes in a Drive folder to CSV")
+    inventory.add_argument("folder_id", help="Drive folder link or ID")
     inventory.add_argument("--output", type=Path, default=Path("drive_inventory.csv"))
-    batch = sub.add_parser("ingest-drive-folder", help="Index mapped PDFs from a Drive folder")
-    batch.add_argument("folder_id")
+    batch = sub.add_parser("ingest-drive-folder", help="Index mapped resumes from a Drive folder")
+    batch.add_argument("folder_id", help="Drive folder link or ID")
     batch.add_argument("--manifest", type=Path, required=True)
+    sp_inventory = sub.add_parser("sharepoint-inventory", help="Preview resumes in SharePoint")
+    sp_inventory.add_argument("folder_url")
+    sp_inventory.add_argument("--output", type=Path, default=Path("sharepoint_inventory.csv"))
+    sp_batch = sub.add_parser("ingest-sharepoint-folder", help="Index mapped SharePoint resumes")
+    sp_batch.add_argument("folder_url")
+    sp_batch.add_argument("--manifest", type=Path, required=True)
     rank = sub.add_parser("rank", help="Rank indexed candidates for a job description")
     rank.add_argument("--job-id", required=True)
     rank.add_argument("--profile-version-id", required=True)
@@ -85,17 +98,12 @@ def drive_store() -> GoogleDriveStore:
     )
 
 
+def sharepoint_store() -> SharePointFolderSource:
+    return configured_sharepoint_source(SETTINGS)
+
+
 def canonical_store() -> CanonicalObjectStore:
-    backend = SETTINGS.canonical_storage_backend.lower()
-    if backend == "s3":
-        return S3ObjectStore(
-            SETTINGS.canonical_s3_bucket,
-            SETTINGS.canonical_s3_prefix,
-            SETTINGS.canonical_s3_endpoint_url,
-        )
-    if backend == "filesystem":
-        return FilesystemObjectStore(Path(SETTINGS.canonical_local_root))
-    raise ValueError(f"unsupported canonical storage backend: {backend}")
+    return configured_canonical_store(SETTINGS)
 
 
 def read_metadata(path: Path | None) -> dict | None:
@@ -103,9 +111,15 @@ def read_metadata(path: Path | None) -> dict | None:
 
 
 def run_drive_inventory(folder_id: str, output: Path) -> None:
-    files = drive_store().list_pdfs(folder_id)
+    files = drive_store().list_resumes(drive_id(folder_id, "folder"))
     write_drive_inventory(files, output)
-    print(f"saved {len(files)} PDFs to {output}")
+    print(f"saved {len(files)} resumes to {output}")
+
+
+def run_sharepoint_inventory(folder_url: str, output: Path) -> None:
+    files = sharepoint_store().list_resumes(folder_url)
+    write_inventory(files, output, "sharepoint_file_id")
+    print(f"saved {len(files)} resumes to {output}")
 
 
 def run_privacy_audit(fail_on_findings: bool) -> None:
@@ -130,22 +144,23 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
     try:
         if args.command == "ingest":
             metadata = read_metadata(args.metadata) or {}
-            metadata["client_source_uri"] = args.source_uri or args.pdf.resolve().as_uri()
-            pipeline.ingest_pdf(
+            metadata["client_source_uri"] = args.source_uri or args.resume.resolve().as_uri()
+            pipeline.ingest_resume(
                 args.candidate_id,
-                args.pdf,
-                store_canonical_resume(canonical_store(), args.candidate_id, args.pdf),
+                args.resume,
+                store_canonical_resume(canonical_store(), args.candidate_id, args.resume),
                 metadata,
             )
         elif args.command == "ingest-drive":
             with tempfile.TemporaryDirectory(prefix="talent-ranker-ingest-") as directory:
-                local = Path(directory) / "resume.pdf"
+                file_id = drive_id(args.file_id, "file")
                 source_store = drive_store()
-                source_store.download(args.file_id, local)
+                local = Path(directory) / f"resume{Path(source_store.resume_name(file_id)).suffix.lower()}"
+                source_store.download(file_id, local)
                 source_uri = store_canonical_resume(canonical_store(), args.candidate_id, local)
                 metadata = read_metadata(args.metadata) or {}
-                metadata["client_source_uri"] = source_store.source_uri(args.file_id)
-                pipeline.ingest_pdf(
+                metadata["client_source_uri"] = source_store.source_uri(file_id)
+                pipeline.ingest_resume(
                     args.candidate_id,
                     local,
                     source_uri,
@@ -155,10 +170,21 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
             report = ingest_drive_folder(
                 pipeline,
                 drive_store(),
-                args.folder_id,
+                drive_id(args.folder_id, "folder"),
                 args.manifest,
                 print,
                 canonical_store(),
+            )
+            print(
+                f"complete: {report.indexed} indexed, {len(report.failures)} failed, "
+                f"{report.skipped} unmapped"
+            )
+            if report.failures:
+                print("\n".join(report.failures))
+                raise SystemExit(1)
+        elif args.command == "ingest-sharepoint-folder":
+            report = ingest_sharepoint_folder(
+                pipeline, sharepoint_store(), args.folder_url, args.manifest, print,
             )
             print(
                 f"complete: {report.indexed} indexed, {len(report.failures)} failed, "
@@ -186,6 +212,13 @@ def main() -> None:
     args = build_parser().parse_args()
     if args.command == "drive-inventory":
         run_drive_inventory(args.folder_id, args.output)
+        return
+    if args.command == "drive-authorize":
+        drive_store()
+        print("Google Drive connected")
+        return
+    if args.command == "sharepoint-inventory":
+        run_sharepoint_inventory(args.folder_url, args.output)
         return
     if args.command == "privacy-audit":
         run_privacy_audit(args.fail_on_findings)

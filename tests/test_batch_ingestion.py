@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from talent_ranker.batch_ingestion import (
+    ManifestEntry,
     ingest_drive_folder,
+    ingest_source_entries,
     read_manifest,
     write_drive_inventory,
 )
@@ -12,7 +14,7 @@ class FakeDriveStore:
     def __init__(self, files: list[DriveFile]):
         self.files = files
 
-    def list_pdfs(self, folder_id: str) -> list[DriveFile]:
+    def list_resumes(self, folder_id: str) -> list[DriveFile]:
         assert folder_id == "folder-1"
         return self.files
 
@@ -27,7 +29,7 @@ class FakePipeline:
     def __init__(self):
         self.calls: list[tuple] = []
 
-    def ingest_pdf(
+    def ingest_resume(
         self,
         candidate_id: str,
         path: Path,
@@ -93,3 +95,15 @@ def test_drive_batch_routes_resume_through_canonical_storage(tmp_path: Path):
     assert report.indexed == 1
     assert pipeline.calls[0][2].startswith("file:")
     assert pipeline.calls[0][3]["client_source_uri"] == "gdrive://file-1"
+
+
+def test_reviewed_file_change_is_rejected_before_indexing():
+    pipeline = FakePipeline()
+    report = ingest_source_entries(
+        pipeline, FakeDriveStore([DriveFile("file-1", "resume.pdf")]),
+        "folder-1", [ManifestEntry("CAND_0001", "file-1", expected_sha256="old-hash")],
+        "SharePoint",
+    )
+    assert report.indexed == 0
+    assert "changed since recruiter review" in report.failures[0]
+    assert not pipeline.calls

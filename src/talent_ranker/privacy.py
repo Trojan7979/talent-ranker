@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .resume_links import URL_PATTERN
+
+
 @dataclass(frozen=True)
 class PiiFinding:
     kind: str
@@ -39,7 +42,7 @@ def detect_pii(text: str) -> list[PiiFinding]:
 
 def redact_pii(text: str) -> str:
     """Replace supported contact identifiers with explicit, non-sensitive labels."""
-    redacted = text
+    redacted = URL_PATTERN.sub("[REDACTED_PROFILE_URL]", text)
     for _, pattern, replacement in _PATTERNS:
         redacted = pattern.sub(replacement, redacted)
     return redacted

@@ -5,7 +5,7 @@ from pathlib import Path
 from .calibration import build_calibrated_query
 from .candidate_retrieval import retrieve_pool
 from .config import Settings
-from .documents import chunk_resume, document_hash, extract_pdf
+from .documents import chunk_resume, document_hash, extract_resume_document
 from .embeddings import CrossEncoderReranker, HuggingFaceEncoder
 from .identifiers import validate_candidate_id
 from .metadata_evidence import assess_metadata
@@ -27,7 +27,7 @@ class RankingPipeline:
         self.reranker = CrossEncoderReranker(settings.reranker_model)
         self.repo = PostgresRepository(settings.database_url)
 
-    def ingest_pdf(
+    def ingest_resume(
         self,
         candidate_id: str,
         path: Path,
@@ -36,8 +36,8 @@ class RankingPipeline:
     ) -> None:
         candidate_id = validate_candidate_id(candidate_id)
         data = path.read_bytes()
-        extracted_text = extract_pdf(path)
-        index_text = redact_pii(extracted_text)
+        extracted = extract_resume_document(path)
+        index_text = redact_pii(extracted.text)
         chunks = chunk_resume(index_text, self.encoder.tokenize, self.encoder.decode)
         vectors = self.encoder.encode([chunk.embedding_text() for chunk in chunks])
         self.repo.upsert_candidate(
@@ -48,7 +48,15 @@ class RankingPipeline:
             chunks,
             vectors,
             metadata,
+            links=extracted.links,
         )
+
+    def ingest_pdf(
+        self, candidate_id: str, path: Path, source_uri: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Preserve the original API for existing PDF callers."""
+        self.ingest_resume(candidate_id, path, source_uri, metadata)
 
     def rank(
         self, job_id: str, job_profile: dict, top_k: int = 100

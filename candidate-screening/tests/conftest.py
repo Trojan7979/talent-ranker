@@ -41,6 +41,13 @@ def client():
                 cur.execute(
                     "CREATE TABLE candidates (candidate_id text PRIMARY KEY, deleted_at timestamptz)"
                 )
+                cur.execute(
+                    """CREATE TABLE candidate_names (
+                       candidate_id text PRIMARY KEY REFERENCES candidates(candidate_id),
+                       display_name text NOT NULL,
+                       source text NOT NULL DEFAULT 'test',
+                       updated_at timestamptz NOT NULL DEFAULT now())"""
+                )
                 cur.execute("CREATE TABLE jobs (job_id text PRIMARY KEY)")
                 cur.execute(
                     """CREATE TABLE job_profile_versions

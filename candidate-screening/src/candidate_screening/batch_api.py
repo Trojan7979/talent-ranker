@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .auth import recruiter_actor
 from .campaigns import JobConfigResponse
@@ -18,8 +18,35 @@ class ContactLookupRequest(BaseModel):
 
 class ContactPreview(BaseModel):
     candidate_id: str
+    display_name: str | None = None
+    name_source: str | None = None
     email: str | None
     contactable: bool
+
+
+class CandidateNameRequest(BaseModel):
+    display_name: str = Field(min_length=2, max_length=80)
+
+    @field_validator("display_name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if len(value) < 2 or any(ord(char) < 32 for char in value) or not any(char.isalpha() for char in value):
+            raise ValueError("enter a candidate name")
+        return value
+
+
+class CandidateNameResponse(BaseModel):
+    candidate_id: str
+    display_name: str
+
+
+@router.put("/candidates/{candidate_id}/name", response_model=CandidateNameResponse)
+def set_candidate_name(candidate_id: str, details: CandidateNameRequest, actor: Actor, request: Request):
+    result = request.app.state.repo.set_candidate_name(candidate_id, details.display_name)
+    if result is None:
+        raise HTTPException(status_code=404, detail="active candidate not found")
+    return result
 
 
 @router.get("/jobs/{job_id}/latest-config", response_model=JobConfigResponse)

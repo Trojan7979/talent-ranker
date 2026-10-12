@@ -12,6 +12,8 @@ __pycache__/
 *.egg-info/
 build/
 frontend/node_modules/
+**/node_modules/
+.data/
 frontend/dist/
 ranking.csv
 ranking.jsonl
