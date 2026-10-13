@@ -11,6 +11,8 @@ from talent_ranker.api import app as ranking_app
 from talent_ranker.config import SETTINGS as ranking_settings
 from talent_ranker.external_evidence import EvidenceStore
 
+from .agent_api import router as agent_router
+from .agent_config import AgentSettings
 from .drive_api import router as drive_router
 from .evidence_api import router as evidence_router
 from .indexing_store import IndexingStore
@@ -46,6 +48,8 @@ def create_app(
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(ranking.router.lifespan_context(ranking))
             await stack.enter_async_context(screening.router.lifespan_context(screening))
+            app.state.ranking_service = ranking
+            app.state.screening_service = screening
             if index_store is not None:
                 app.state.index_store = index_store
             elif ranking is ranking_app:
@@ -60,6 +64,8 @@ def create_app(
 
     app = FastAPI(title="Sieve API", lifespan=lifespan)
     app.state.screening_settings = getattr(screening.state, "settings", None)
+    app.state.agent_settings = AgentSettings()
+    app.include_router(agent_router)
     app.include_router(source_router)
     app.include_router(drive_router)
     app.include_router(resume_router)
