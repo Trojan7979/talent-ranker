@@ -20,6 +20,7 @@ export function RecruiterLayout() {
         <NavLink to="/ranking">Ranking</NavLink>
         <NavLink to="/shortlists">Saved shortlists</NavLink>
         <NavLink to="/screening/campaigns">Screening campaigns</NavLink>
+        <NavLink to="/agents/recruitment">Recruitment Agent</NavLink>
       </nav>
       <Outlet />
     </SessionContext.Provider>
