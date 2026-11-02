@@ -9,6 +9,7 @@ description = "Auditable hybrid retrieval and reranking for candidate resumes"
 requires-python = ">=3.11"
 dependencies = [
   "boto3>=1.35,<2",
+  "cryptography>=43,<51",
   "fastapi>=0.115,<1",
   "google-api-python-client>=2.150,<3",
   "google-auth>=2.36,<3",
@@ -25,7 +26,8 @@ dependencies = [
   "python-multipart>=0.0.20,<1",
   "requests>=2.31,<3",
   "urllib3>=2.2.3,<3",
-  "sentence-transformers>=3.3,<4",
+  "transformers>=4.44,<5",
+  "tzdata>=2025.2",
   "uvicorn[standard]>=0.32,<1",
 ]
 
@@ -41,7 +43,9 @@ talent-ranker = "talent_ranker.cli:main"
 sieve-api = "sieve_app.server:main"
 sieve-worker = "candidate_screening.worker:main"
 sieve-index-worker = "sieve_app.indexing_worker:main"
+sieve-drive-watch = "sieve_app.drive_watch_worker:main"
 sieve-enrichment-worker = "sieve_app.enrichment_worker:main"
+sieve-agent-ranking-worker = "sieve_app.agent_ranking_worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "candidate-screening/src"]

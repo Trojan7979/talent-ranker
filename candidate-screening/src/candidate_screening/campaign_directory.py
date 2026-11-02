@@ -11,6 +11,9 @@ class CampaignDirectoryMixin:
         before_created_at: datetime | None,
         before_id: UUID | None,
         limit: int,
+        allowed_jobs: list[str] | None = None,
+        workspace_id: str | None = None,
+        actor_id: str | None = None,
     ) -> dict:
         with self.connection() as conn, conn.cursor() as cur:
             cur.execute(
@@ -19,10 +22,16 @@ class CampaignDirectoryMixin:
                           AS candidate_count
                    FROM screening_campaigns
                    WHERE (%s::text IS NULL OR job_id=%s)
+                     AND (%s::text[] IS NULL OR job_id=ANY(%s::text[]))
+                     AND (%s::text IS NULL OR EXISTS (
+                       SELECT 1 FROM ranking_runs r WHERE r.run_id=screening_campaigns.ranking_run_id
+                         AND r.workspace_id=%s AND r.actor_id=%s))
                      AND (%s::timestamptz IS NULL OR
                           (created_at,id) < (%s::timestamptz,%s::uuid))
                    ORDER BY created_at DESC,id DESC LIMIT %s""",
-                (job_id, job_id, before_created_at, before_created_at, before_id, limit + 1),
+                (job_id, job_id, allowed_jobs, allowed_jobs,
+                 workspace_id, workspace_id, actor_id,
+                 before_created_at, before_created_at, before_id, limit + 1),
             )
             rows = cur.fetchall()
         items = [

@@ -5,6 +5,7 @@ from uuid import UUID
 import pytest
 from fastapi import HTTPException
 
+from talent_ranker.access import RecruiterScope
 from talent_ranker.api import app, approve_job_profile, calibrate_job, rank_candidates
 from talent_ranker.llm_priority_extraction import CalibrationError
 from talent_ranker.schemas import ApproveJobProfileRequest, CalibrateJobRequest, RankRequest
@@ -69,7 +70,13 @@ class FakeJobRepository:
         return approved
 
 
-def test_calibration_endpoint_creates_recruiter_reviewable_draft():
+def test_calibration_endpoint_creates_recruiter_reviewable_draft(monkeypatch):
+    from talent_ranker.priority_extraction import RuleBasedPriorityExtractor
+
+    monkeypatch.setattr(
+        "talent_ranker.api.configured_extractor",
+        lambda settings: (RuleBasedPriorityExtractor(), {"method": "rules"}),
+    )
     repository = FakeJobRepository()
     app.state.pipeline = SimpleNamespace(repo=repository)
 
@@ -77,7 +84,8 @@ def test_calibration_endpoint_creates_recruiter_reviewable_draft():
         CalibrateJobRequest(
             job_id="senior-ai-engineer",
             job_description="Senior engineer. Python is required for this role.",
-        )
+        ),
+        RecruiterScope("demo", "alex", frozenset({"senior-ai-engineer"})),
     )
 
     assert response.status == "draft"
@@ -100,7 +108,8 @@ def test_failed_llm_draft_does_not_create_profile(monkeypatch):
 
     with pytest.raises(HTTPException) as error:
         calibrate_job(
-            CalibrateJobRequest(job_id="job", job_description="A role with Python required.")
+            CalibrateJobRequest(job_id="job", job_description="A role with Python required."),
+            RecruiterScope("demo", "alex", frozenset({"job"})),
         )
 
     assert error.value.status_code == 502
@@ -111,7 +120,10 @@ def test_approval_records_recruiter_identity():
     repository = FakeJobRepository(profile())
     app.state.pipeline = SimpleNamespace(repo=repository)
 
-    response = approve_job_profile(PROFILE_ID, ApproveJobProfileRequest(approved_by="alex"))
+    response = approve_job_profile(
+        PROFILE_ID, ApproveJobProfileRequest(approved_by="alex"),
+        RecruiterScope("demo", "alex", frozenset({"senior-ai-engineer"})),
+    )
 
     assert response.status == "approved"
     assert response.approved_by == "alex"
@@ -126,7 +138,8 @@ def test_ranking_rejects_unapproved_profile():
                 job_id="senior-ai-engineer",
                 job_profile_version_id=PROFILE_ID,
                 top_k=10,
-            )
+            ),
+            RecruiterScope("demo", "alex", frozenset({"senior-ai-engineer"})),
         )
 
     assert error.value.status_code == 409

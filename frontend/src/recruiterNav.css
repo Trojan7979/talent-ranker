@@ -1,10 +1,35 @@
 .recruiter-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 10px 24px;
   border-bottom: 1px solid #d9deea;
   background: #fff;
+}
+
+.recruiter-nav-links, .recruiter-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.recruiter-account-actions { gap: 16px; margin-left: auto; }
+.recruiter-account { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.recruiter-account-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; color: #173f9f; background: #e9efff; font-weight: 800; }
+.recruiter-account-copy { display: grid; gap: 2px; min-width: 0; }
+.recruiter-account-copy small { color: #62708a; font-size: 11px; }
+.recruiter-account-copy strong { overflow: hidden; max-width: 210px; color: #172033; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.recruiter-sign-out { border: 1px solid #d9deea; color: #344159; background: #fff; font-size: 12px; font-weight: 700; }
+.recruiter-sign-out:hover, .recruiter-sign-out:focus-visible { border-color: #2458d3; color: #173f9f; background: #f6f8ff; }
+.recruiter-sign-out-error { width: 100%; margin: 0; color: #9e2f31; font-size: 12px; text-align: right; }
+
+@media (max-width: 860px) {
+  .recruiter-nav { padding: 10px 16px; }
+  .recruiter-nav-links { order: 2; width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .recruiter-nav-links a { white-space: nowrap; }
 }
 
 .recruiter-nav a {
@@ -18,3 +43,98 @@
 .recruiter-nav a[aria-current="page"] {
   background: #e9efff;
 }
+
+.recruiter-auth-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px 20px;
+  background: radial-gradient(circle at 50% 15%, #e8efff 0, #f7f8fb 48%);
+}
+
+.recruiter-auth-card {
+  width: min(100%, 440px);
+  padding: clamp(28px, 5vw, 44px);
+  border: 1px solid #dce3f0;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(24, 39, 75, .1);
+}
+
+.recruiter-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 44px;
+  color: #172033;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+}
+
+.recruiter-auth-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: #fff;
+  background: #2458d3;
+  font-size: 21px;
+}
+
+.recruiter-auth-eyebrow {
+  margin: 0 0 8px;
+  color: #2458d3;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.recruiter-auth-card h1 {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 38px);
+  letter-spacing: -.04em;
+}
+
+.recruiter-auth-intro {
+  margin: 12px 0 28px;
+  color: #526079;
+  line-height: 1.55;
+}
+
+.recruiter-auth-providers {
+  display: grid;
+  gap: 12px;
+}
+
+.recruiter-auth-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 48px;
+  border: 1px solid #ccd5e5;
+  border-radius: 10px;
+  color: #172033;
+  background: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+
+.recruiter-auth-provider:hover,
+.recruiter-auth-provider:focus-visible {
+  border-color: #2458d3;
+  background: #f6f8ff;
+  box-shadow: 0 0 0 3px rgba(36, 88, 211, .12);
+  outline: none;
+}
+
+.recruiter-auth-provider-icon { display: grid; place-items: center; width: 20px; height: 20px; font-size: 18px; }
+.recruiter-auth-provider-icon-google { color: #4285f4; font-weight: 800; }
+.recruiter-auth-microsoft-mark { width: 18px; height: 18px; background: conic-gradient(#7fba00 0 25%, #ffb900 0 50%, #00a4ef 0 75%, #f25022 0); }
+.recruiter-auth-note { margin: 28px 0 0; color: #718099; font-size: 12px; line-height: 1.5; text-align: center; }
+.recruiter-auth-unavailable { margin: 0; color: #9e2f31; line-height: 1.5; }
+.recruiter-auth-loading { padding: 32px; color: #526079; text-align: center; }

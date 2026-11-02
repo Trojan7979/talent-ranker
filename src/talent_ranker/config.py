@@ -11,24 +11,25 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = (
-        "postgresql://talent_ranker:talent-ranker-local@localhost:5432/talent_ranker"
-    )
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
-    reranker_model: str = "BAAI/bge-reranker-base"
+    database_url: str = ""
+    hosted_embedding_model: str = ""
+    hosted_reranker_model: str = ""
+    hosted_embedding_url: str = ""
+    hosted_reranker_url: str = ""
+    hosted_model_timeout_seconds: float = 60.0
     retrieval_limit: int = 300
     rerank_limit: int = 100
     rrf_k: int = 60
-    calibration_extractor: Literal["rules", "llm"] = "rules"
-    calibration_api_url: str = "https://platform.qubrid.com/v1/chat/completions"
+    calibration_extractor: Literal["rules", "llm", "hybrid"] = "rules"
+    calibration_api_url: str = ""
     calibration_api_key: SecretStr | None = None
-    calibration_model: str = "deepseek-ai/DeepSeek-V4-Pro"
+    calibration_model: str = ""
     calibration_timeout_seconds: float = 60.0
     google_credentials_file: str = "secrets/google-client.json"
     google_token_file: str = ".tokens/drive.json"
     google_web_credentials_file: str = "candidate-screening/secrets/gmail-web-client.json"
-    google_web_redirect_uri: str = "http://127.0.0.1:8000/api/sources/drive/oauth/callback"
-    frontend_base_url: str = "http://127.0.0.1:5173"
+    google_web_redirect_uri: str = ""
+    frontend_base_url: str = ""
     sharepoint_tenant_id: str = ""
     sharepoint_client_id: str = ""
     sharepoint_client_secret: SecretStr | None = None
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
     canonical_s3_prefix: str = "talent-ranker"
     canonical_s3_endpoint_url: str | None = None
     canonical_local_root: str = ".data/object-storage"
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

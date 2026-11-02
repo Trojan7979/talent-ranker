@@ -5,10 +5,12 @@ import { ShortlistPage } from "./ShortlistPage";
 import { CampaignPage } from "./CampaignPage";
 import { CandidatePage } from "./CandidatePage";
 import { RecruiterLayout } from "./RecruiterLayout";
+import { AgentWorkforcePage } from "./AgentWorkforcePage";
 import { RecruitmentAgentPage } from "./RecruitmentAgentPage";
 import { SavedRunsPage } from "./SavedRunsPage";
 import { CampaignsPage } from "./CampaignsPage";
 import { ResumeSourcesPage } from "./ResumeSourcesPage";
+import "./agentWorkspace.css";
 import "./styles.css";
 import "./resumeSources.css";
 
@@ -26,6 +28,7 @@ createRoot(document.getElementById("root") as HTMLElement).render(
         <Route path="/sources" element={<ResumeSourcesPage />} />
         <Route path="/shortlists" element={<SavedRunsPage />} />
         <Route path="/screening/campaigns" element={<CampaignsPage />} />
+        <Route path="/agents" element={<AgentWorkforcePage />} />
         <Route path="/agents/recruitment" element={<RecruitmentAgentPage />} />
         <Route path="/jobs/:jobId/ranking-runs/:runId" element={<SavedRunRoute />} />
         <Route path="/screening/campaigns/:campaignId" element={<CampaignPage />} />

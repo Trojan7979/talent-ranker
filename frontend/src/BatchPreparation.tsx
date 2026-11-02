@@ -15,7 +15,7 @@ type Props = {
 export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelectRecipients, initialToken = "" }: Props) {
   const navigate = useNavigate();
   const recruiterSession = useRecruiterSession();
-  const [token, setToken] = useState(initialToken || recruiterSession.token);
+  const [token] = useState(initialToken || recruiterSession.token);
   const [activeToken, setActiveToken] = useState("");
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft | null>(null);
   const [latest, setLatest] = useState<JobConfig | null>(null);
@@ -122,8 +122,6 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelec
     <p className="hint">The {selectedIds.length} candidates below will be the final recipients. Nothing sends until you approve the saved campaign.</p>
     {error && <p className="error" role="alert">{error}</p>}
     {!activeToken ? <form onSubmit={connect}>
-      <label>Recruiter bearer token <input type="password" autoComplete="off" value={token}
-        onChange={(event) => setToken(event.target.value)} required /></label>
       <button disabled={busy}>Load screening setup</button>
     </form> : <>
       <div className="batch-section">
@@ -135,19 +133,19 @@ export function BatchPreparation({ jobId, runId, profileId, selectedIds, onSelec
       </div>
       <div className="batch-section">
         <h3>2. Agent bulk selection or manual selection</h3>
-        <p className="hint">The rule uses scores from this saved run. Preview it, then choose whether to use its proposed recipients or keep your manual selection.</p>
+        <p className="hint">Select candidates by saved rank, preview them, then choose whether to use the proposed recipients or keep your manual selection.</p>
         <div className="batch-controls">
           <label>Rule <select value={rule.kind} onChange={(event) => {
-            const kind = event.target.value as SelectionRule["kind"];
-            setRule({ kind, value: kind === "score_threshold" ? 0.5 : Math.max(1, Math.round(rule.value)) });
+            const kind = event.target.value as "top_n" | "rank_cutoff";
+            setRule({ kind, value: Math.max(1, Math.round(rule.value)) });
             setPreview(null);
           }}><option value="top_n">Top N</option><option value="rank_cutoff">Rank cutoff</option>
-            <option value="score_threshold">Score threshold</option></select></label>
-          <label>Value <input type="number" min={rule.kind === "score_threshold" ? 0 : 1}
-            max={rule.kind === "score_threshold" ? 1 : 10000} step={rule.kind === "score_threshold" ? 0.01 : 1}
+            </select></label>
+          <label>Value <input type="number" min={1}
+            max={10000} step={1}
             value={rule.value} onChange={(event) => { setRule({ ...rule, value: Number(event.target.value) }); setPreview(null); }} /></label>
           <button type="button" disabled={busy || !Number.isFinite(rule.value) ||
-            (rule.kind === "score_threshold" ? rule.value < 0 || rule.value > 1 : rule.value < 1 || !Number.isInteger(rule.value))}
+            rule.value < 1 || !Number.isInteger(rule.value)}
             onClick={previewRule}>Preview</button>
         </div>
         {preview && <>

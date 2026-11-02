@@ -21,6 +21,8 @@ def create_app(repository=None, settings: Settings | None = None, gmail_web_oaut
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         owned = repository is None
+        if (owned or settings.workflow_enabled) and not settings.database_url:
+            raise ValueError("Configure SCREENING_DATABASE_URL before starting screening")
         app.state.repo = repository or PostgresRepository(settings.database_url)
         with ExitStack() as stack:
             if settings.workflow_enabled:

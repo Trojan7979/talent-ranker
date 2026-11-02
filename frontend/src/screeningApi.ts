@@ -89,7 +89,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 function recruiter(token: string): HeadersInit {
-  return { Authorization: `Bearer ${token}` };
+  void token;
+  return {};
 }
 
 export const screeningApi = {

@@ -44,10 +44,22 @@ def _extract_requirements(text: str) -> tuple[list[str], list[str]]:
     preferred: list[str] = []
     for sentence in _sentences(text):
         lowered = sentence.lower()
+        if re.fullmatch(r"(?:responsibilities|requirements|qualifications|about (?:the )?role)", lowered):
+            continue
         if any(marker in lowered for marker in PREFERRED_MARKERS):
             preferred.append(sentence)
         elif any(marker in lowered for marker in MUST_MARKERS):
             must_have.append(sentence)
+        elif re.search(r"\b(?:experience (?:with|in)|proficient (?:with|in)|"
+                       r"skilled (?:with|in)|ability to|we (?:need|seek)|"
+                       r"looking for|responsible for)\b", lowered):
+            must_have.append(sentence)
+    if not must_have and not preferred:
+        # Preserve evidence from unstructured descriptions, including jobs
+        # outside the software domain. The recruiter reviews these before use.
+        meaningful = [sentence for sentence in _sentences(text)
+                      if len(sentence.split()) >= 4 and len(sentence) <= 500]
+        must_have = meaningful[:10]
     return _unique(must_have), _unique(preferred)
 
 

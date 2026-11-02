@@ -21,7 +21,7 @@ def settings(**overrides):
         "model": "configured-tool-model",
         "api_key": "test-secret",
         "base_url": "https://provider.example/v1",
-        "allowed_jobs_by_actor": {"recruiter-1": {"backend-engineer"}},
+        "workspace_id": "test-workspace",
     }
     return AgentSettings(_env_file=None, **(values | overrides))
 
@@ -34,11 +34,10 @@ def test_agent_is_opt_in_and_secrets_are_not_in_repr():
     assert "test-secret" not in repr(settings())
 
 
-def test_scope_is_explicit_and_unknown_actors_are_denied():
+def test_agent_activation_does_not_need_demo_actor_mappings():
     configured = settings()
     configured.require_ready()
-    assert configured.allowed_job_ids("recruiter-1") == frozenset({"backend-engineer"})
-    assert configured.allowed_job_ids("someone-else") == frozenset()
+    assert not hasattr(configured, "allowed_jobs_by_actor")
 
 
 @pytest.mark.parametrize(
@@ -48,10 +47,6 @@ def test_scope_is_explicit_and_unknown_actors_are_denied():
         {"api_key": " "},
         {"base_url": ""},
         {"workspace_id": " "},
-        {"allowed_jobs_by_actor": {}},
-        {"allowed_jobs_by_actor": {"recruiter-1": []}},
-        {"allowed_jobs_by_actor": {"": ["job"]}},
-        {"allowed_jobs_by_actor": {"recruiter-1": [""]}},
     ],
 )
 def test_incomplete_configuration_is_rejected_at_activation(overrides):
@@ -84,9 +79,9 @@ def test_execution_budgets_are_bounded():
         settings(execution_timeout_seconds=10, model_timeout_seconds=30).require_ready()
 
 
-def test_environment_scope_parses_and_calibration_key_is_not_reused(monkeypatch):
+def test_agent_does_not_accept_environment_actor_mapping_or_calibration_key(monkeypatch):
     monkeypatch.setenv("SIEVE_AGENT_ALLOWED_JOBS_BY_ACTOR", '{"recruiter-2":["job-2"]}')
     monkeypatch.setenv("TALENT_RANKER_CALIBRATION_API_KEY", "unrelated-secret")
     configured = AgentSettings(_env_file=None)
-    assert configured.allowed_job_ids("recruiter-2") == frozenset({"job-2"})
+    assert not hasattr(configured, "allowed_jobs_by_actor")
     assert configured.api_key is None

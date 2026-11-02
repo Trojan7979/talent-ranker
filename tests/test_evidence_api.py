@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from sieve_app.evidence_api import router
+from tests.auth_support import FakeRecruiterIdentity
 
 
 @pytest.fixture
@@ -19,6 +20,13 @@ def client():
     app = FastAPI()
     app.state.evidence_store = Store()
     app.state.screening_settings = SimpleNamespace(recruiter_tokens={'secret': 'recruiter'})
+    app.state.recruiter_identity = FakeRecruiterIdentity()
+    app.state.agent_settings = SimpleNamespace(workspace_id='demo')
+    app.state.ranking_service = SimpleNamespace(state=SimpleNamespace(
+        pipeline=SimpleNamespace(repo=SimpleNamespace(
+            accessible_candidate_ids=lambda ids, scope: set(ids) & {'CAND_0001'}
+        ))
+    ))
     app.include_router(router)
     with TestClient(app) as client:
         yield client, calls
@@ -28,13 +36,13 @@ def test_evidence_requires_auth_before_reading_candidate_data(client):
     client, calls = client
     assert client.get('/api/sources/candidates/CAND_0001/evidence').status_code == 401
     assert client.post('/api/sources/evidence/batch', json={'candidate_ids': ['CAND_0001']},
-                      headers={'Authorization': 'Bearer wrong'}).status_code == 403
+                      headers={'Cookie': 'sieve_recruiter_session=wrong'}).status_code == 401
     assert not calls
 
 
 def test_evidence_reads_are_validated_and_not_cached(client):
     client, calls = client
-    headers = {'Authorization': 'Bearer secret'}
+    headers = {'Cookie': 'sieve_recruiter_session=secret'}
     response = client.get('/api/sources/candidates/CAND_0001/evidence', headers=headers)
     assert response.status_code == 200 and response.json() == []
     assert response.headers['Cache-Control'] == 'no-store'

@@ -28,7 +28,6 @@ export async function listCampaigns(
     query.set("before_id", cursor.id);
   }
   const response = await fetch(`/api/screening/campaigns?${query}`, {
-    headers: { Authorization: `Bearer ${token}` },
     signal,
   });
   if (!response.ok) {

@@ -52,6 +52,35 @@ def test_freeform_jd_uses_one_model_call_with_grounded_facts():
     assert payload["messages"][1]["content"].endswith(JD)
 
 
+def test_deepseek_criteria_extraction_disables_extended_reasoning():
+    requests = []
+    extractor = LLMPriorityExtractor(
+        "https://example.test/v1/chat/completions", "secret",
+        "deepseek-ai/DeepSeek-V4-Pro",
+        post=lambda request, timeout: (requests.append(request) or response([
+            fact("must_have_skills", "Python", "builds forecasting models in Python")
+        ])),
+    )
+
+    extractor.extract(JD)
+
+    assert json.loads(requests[0].data)["enable_thinking"] is False
+
+
+def test_fenced_json_is_parsed_but_facts_still_require_jd_quotes():
+    wrapped = "```json\n" + json.dumps({"facts": [
+        fact("must_have_skills", "Python", "builds forecasting models in Python")
+    ]}) + "\n```"
+    extractor = LLMPriorityExtractor(
+        "https://example.test", "secret", "model",
+        post=lambda request, timeout: {
+            "choices": [{"finish_reason": "stop", "message": {"content": wrapped}}]
+        },
+    )
+
+    assert extractor.extract(JD).must_have_skills == ["Python"]
+
+
 def test_ungrounded_quote_fails_without_creating_a_draft():
     extractor = LLMPriorityExtractor(
         "https://example.test",
@@ -105,12 +134,55 @@ def test_configured_extractor_records_model_without_exposing_key():
         _env_file=None,
         calibration_extractor="llm",
         calibration_api_key=SecretStr("secret"),
+        calibration_api_url="https://example.test/v1/chat/completions",
         calibration_model="Qwen/Qwen3.8-27B",
     )
     extractor, metadata = configured_extractor(settings)
     assert isinstance(extractor, LLMPriorityExtractor)
     assert metadata["model"] == "Qwen/Qwen3.8-27B"
     assert "secret" not in str(metadata)
+
+
+def test_hybrid_uses_rules_for_structured_lists_without_model_call():
+    settings = Settings(_env_file=None, calibration_extractor="hybrid", calibration_api_key=SecretStr("secret"), calibration_api_url="https://example.test/v1/chat/completions", calibration_model="test-model")
+    extractor, metadata = configured_extractor(settings)
+    extractor.llm.extract = lambda jd: pytest.fail("structured JD must not call model")
+    result = extractor.extract("Engineer\nRequired skills: Python, FastAPI\nPreferred skills: AWS")
+    assert result.must_have_skills == ["Python", "FastAPI"]
+    assert result.preferred_skills == ["AWS"]
+    assert metadata["method"] == "rules"
+
+
+def test_hybrid_calls_model_for_freeform_requirement_even_with_other_skills():
+    settings = Settings(_env_file=None, calibration_extractor="hybrid", calibration_api_key=SecretStr("secret"), calibration_api_url="https://example.test/v1/chat/completions", calibration_model="test-model")
+    extractor, metadata = configured_extractor(settings)
+    calls = []
+
+    def model(jd):
+        calls.append(jd)
+        return LLMPriorityExtractor(
+            "https://example.test", "secret", "model",
+            post=lambda request, timeout: response([
+                fact("must_have_skills", "FastAPI", "Must have FastAPI"),
+            ]),
+        ).extract(jd)
+
+    extractor.llm.extract = model
+    result = extractor.extract("Engineer\nPreferred skills: AWS\nMust have FastAPI")
+    assert result.must_have_skills == ["FastAPI"]
+    assert len(calls) == 1
+    assert metadata["method"] == "llm"
+
+
+def test_hybrid_does_not_treat_conjoined_skill_list_as_complete():
+    settings = Settings(_env_file=None, calibration_extractor="hybrid", calibration_api_key=SecretStr("secret"), calibration_api_url="https://example.test/v1/chat/completions", calibration_model="test-model")
+    extractor, _ = configured_extractor(settings)
+    def unavailable(jd):
+        raise CalibrationError("model unavailable")
+
+    extractor.llm.extract = unavailable
+    with pytest.raises(CalibrationError, match="model unavailable"):
+        extractor.extract("Required skills: Python and FastAPI")
 
 
 def test_llm_mode_requires_key():

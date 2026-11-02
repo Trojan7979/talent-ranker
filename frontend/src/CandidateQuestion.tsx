@@ -7,7 +7,7 @@ export type Prompt = { kind: "qualification"; id: string; text: string } | {
 
 type AnswerStatus = "answered" | "unsure" | "prefer_not_to_answer";
 
-function qualificationQuestion(text: string): string {
+export function qualificationQuestion(text: string): string {
   const subject = text.trim().replace(/[.!?]+$/, "");
   const experience = subject.match(/^Experience\s+(.+)$/i);
   if (experience) return `Have you had experience ${experience[1]}?`;

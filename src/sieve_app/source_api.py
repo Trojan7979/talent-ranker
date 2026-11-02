@@ -6,7 +6,6 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, model_validator
 from requests import RequestException
 
@@ -14,21 +13,15 @@ from talent_ranker.config import SETTINGS
 from talent_ranker.identifiers import validate_candidate_id
 from talent_ranker.sharepoint import FolderLink, configured_sharepoint_source
 
+from .recruiter_identity import actor_for
+
 router = APIRouter(prefix="/api/sources/sharepoint", tags=["resume sources"])
-bearer = HTTPBearer(auto_error=False)
 
 
 def recruiter_actor(
     request: Request,
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ) -> str:
-    settings = getattr(request.app.state, "screening_settings", None)
-    if credentials is None:
-        raise HTTPException(status_code=401, detail="recruiter bearer token required")
-    actor = settings.recruiter_tokens.get(credentials.credentials) if settings else None
-    if not actor:
-        raise HTTPException(status_code=403, detail="recruiter token not authorized")
-    return actor
+    return actor_for(request)
 
 
 Actor = Annotated[str, Depends(recruiter_actor)]

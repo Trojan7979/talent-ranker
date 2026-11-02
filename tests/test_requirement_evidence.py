@@ -1,3 +1,4 @@
+from talent_ranker.access import RecruiterScope
 from talent_ranker.candidate_retrieval import retrieve_pool
 from talent_ranker.evaluation import evaluate_run
 from talent_ranker.metadata_evidence import assess_metadata
@@ -39,13 +40,14 @@ def test_retrieval_unions_requirement_queries_before_shortlist():
             return [[0.0] for _ in texts]
 
     class Repo:
-        def retrieve(self, query, vector, limit):
+        def retrieve(self, query, vector, limit, scope):
             cid = "A" if "Mandatory" in query else "B"
             return [cid], [], {cid: {"chunks": [query], "metadata": {}}}
 
     priorities = HiringPriorities(must_have_skills=["Python"])
     ordered, scores, records, trace = retrieve_pool(
-        Repo(), Encoder(), "Mandatory skills: Python", priorities, 10, 60
+        Repo(), Encoder(), "Mandatory skills: Python", priorities, 10, 60,
+        RecruiterScope("demo", "recruiter", frozenset({"job-1"})),
     )
     assert ordered == ["A", "B"]
     assert set(scores) == set(records) == {"A", "B"}

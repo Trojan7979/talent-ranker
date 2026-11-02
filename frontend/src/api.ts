@@ -5,6 +5,13 @@ export type CandidateScore = {
   score_components: Record<string, number>;
   evidence: string[];
   reasoning: string;
+  requirement_evidence?: Array<{
+    category: string;
+    requirement: string | Record<string, unknown>;
+    status: string;
+    reported_value?: number | string | null;
+    passage?: string | null;
+  }>;
 };
 
 export type RankResponse = {
@@ -78,6 +85,12 @@ export type JobProfile = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api/ranking";
 
+function recruiterHeaders(json = false): HeadersInit {
+  return {
+    ...(json ? { "Content-Type": "application/json" } : {}),
+  };
+}
+
 async function parseResponse<T>(response: Response, action: string): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => null);
@@ -89,7 +102,7 @@ async function parseResponse<T>(response: Response, action: string): Promise<T> 
 export async function calibrateJob(jobId: string, jobDescription: string): Promise<JobProfile> {
   const response = await fetch(`${apiBaseUrl}/jobs/calibrate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: recruiterHeaders(true),
     body: JSON.stringify({ job_id: jobId, job_description: jobDescription }),
   });
   return parseResponse(response, "Calibration");
@@ -98,7 +111,7 @@ export async function calibrateJob(jobId: string, jobDescription: string): Promi
 export async function updateJobProfile(profile: JobProfile): Promise<JobProfile> {
   const response = await fetch(`${apiBaseUrl}/job-profiles/${profile.profile_version_id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: recruiterHeaders(true),
     body: JSON.stringify({ priorities: profile.priorities }),
   });
   return parseResponse(response, "Profile update");
@@ -106,12 +119,11 @@ export async function updateJobProfile(profile: JobProfile): Promise<JobProfile>
 
 export async function approveJobProfile(
   profileVersionId: string,
-  approvedBy: string,
 ): Promise<JobProfile> {
   const response = await fetch(`${apiBaseUrl}/job-profiles/${profileVersionId}/approve`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ approved_by: approvedBy }),
+    headers: recruiterHeaders(true),
+    body: JSON.stringify({}),
   });
   return parseResponse(response, "Profile approval");
 }
@@ -123,7 +135,7 @@ export async function rankCandidates(
 ): Promise<RankResponse> {
   const response = await fetch(`${apiBaseUrl}/rank`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: recruiterHeaders(true),
     body: JSON.stringify({
       job_id: jobId,
       job_profile_version_id: profileVersionId,
@@ -141,6 +153,7 @@ export async function getSavedRun(
   const query = new URLSearchParams({ after_rank: String(afterRank), limit: "50" });
   const response = await fetch(`${apiBaseUrl}/ranking-runs/${encodeURIComponent(runId)}?${query}`, {
     signal,
+    headers: recruiterHeaders(),
   });
   return parseResponse(response, "Saved shortlist");
 }
@@ -156,11 +169,15 @@ export async function listSavedRuns(
     query.set("before_created_at", cursor.createdAt);
     query.set("before_run_id", cursor.runId);
   }
-  const response = await fetch(`${apiBaseUrl}/ranking-runs?${query}`, { signal });
+  const response = await fetch(`${apiBaseUrl}/ranking-runs?${query}`, {
+    signal, headers: recruiterHeaders(),
+  });
   return parseResponse(response, "Saved shortlists");
 }
 
 export async function getJobProfile(profileVersionId: string): Promise<JobProfile> {
-  const response = await fetch(`${apiBaseUrl}/job-profiles/${encodeURIComponent(profileVersionId)}`);
+  const response = await fetch(`${apiBaseUrl}/job-profiles/${encodeURIComponent(profileVersionId)}`, {
+    headers: recruiterHeaders(),
+  });
   return parseResponse(response, "Approved hiring criteria");
 }

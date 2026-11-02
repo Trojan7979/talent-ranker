@@ -10,7 +10,6 @@ _CAMPAIGN_COLUMNS = """id,job_id,ranking_run_id,job_profile_version_id,config_id
     selection_rule,proposed_candidate_ids,final_candidate_ids,message_template,
     expiry_hours,status,revision,approved_by,approved_at,created_at"""
 
-
 class CampaignStoreMixin:
     def create_job_config(
         self, job_id: str, profile_id: UUID, questions: JobQuestions, actor: str

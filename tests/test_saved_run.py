@@ -10,7 +10,13 @@ import psycopg
 import pytest
 from fastapi import HTTPException
 
-from talent_ranker.api import app, get_saved_ranking_run, list_saved_ranking_runs
+from talent_ranker.access import RecruiterScope
+from talent_ranker.api import (
+    app,
+    get_candidate_evidence,
+    get_saved_ranking_run,
+    list_saved_ranking_runs,
+)
 from talent_ranker.repository import PostgresRepository
 
 RUN_ID = UUID("66666666-6666-6666-6666-666666666666")
@@ -38,8 +44,9 @@ def test_saved_run_pages_skip_deleted_candidates_and_keep_rank_cursor():
                 )
                 cur.execute(
                     """INSERT INTO ranking_runs
-                       (run_id,job_id,job_profile_version_id,jd_text,model_versions,scoring_config)
-                       VALUES (%s,'job-1',%s,'Mock role','{}','{}')""",
+                       (run_id,job_id,job_profile_version_id,jd_text,model_versions,scoring_config,
+                        workspace_id,actor_id)
+                       VALUES (%s,'job-1',%s,'Mock role','{}','{}','demo','alex')""",
                     (RUN_ID, PROFILE_ID),
                 )
                 cur.execute(
@@ -57,11 +64,19 @@ def test_saved_run_pages_skip_deleted_candidates_and_keep_rank_cursor():
                               (%s,'CAND_0003',3,0.7,'{}','[]','third')""",
                     (RUN_ID, RUN_ID, RUN_ID),
                 )
+                cur.execute(
+                    """INSERT INTO candidate_source_grants
+                       (candidate_id,workspace_id,actor_id,source_uri,grant_kind)
+                       VALUES ('CAND_0001','demo','alex','mock://1','owner'),
+                              ('CAND_0002','demo','alex','mock://2','owner'),
+                              ('CAND_0003','demo','alex','mock://3','owner')"""
+                )
             repo = PostgresRepository.__new__(PostgresRepository)
             repo.conn = conn
             app.state.pipeline = SimpleNamespace(repo=repo)
-            first = get_saved_ranking_run(RUN_ID, after_rank=0, limit=1)
-            second = get_saved_ranking_run(RUN_ID, after_rank=first.next_after_rank, limit=1)
+            access = RecruiterScope("demo", "alex", frozenset({"job-1"}))
+            first = get_saved_ranking_run(RUN_ID, access, after_rank=0, limit=1)
+            second = get_saved_ranking_run(RUN_ID, access, after_rank=first.next_after_rank, limit=1)
             assert first.total_count == 2
             assert first.job_profile_version_id == PROFILE_ID
             assert [item.candidate_id for item in first.items] == ["CAND_0001"]
@@ -79,28 +94,42 @@ def test_saved_run_pages_skip_deleted_candidates_and_keep_rank_cursor():
                 cur.execute(
                     """INSERT INTO ranking_runs
                        (run_id,job_id,job_profile_version_id,jd_text,model_versions,
-                        scoring_config,created_at)
-                       VALUES (%s,'job-1',%s,'Mock role','{}','{}',%s)""",
+                        scoring_config,created_at,workspace_id,actor_id)
+                       VALUES (%s,'job-1',%s,'Mock role','{}','{}',%s,'demo','alex')""",
                     (newer_id, PROFILE_ID, created_at),
                 )
-            directory = list_saved_ranking_runs(None, None, None, 1)
+            directory = list_saved_ranking_runs(access, None, None, None, 1)
             assert [item.run_id for item in directory.items] == [newer_id]
             assert directory.items[0].total_count == 0
             older = list_saved_ranking_runs(
-                "job-1", directory.next_before_created_at, directory.next_before_run_id, 1
+                access, "job-1", directory.next_before_created_at, directory.next_before_run_id, 1
             )
             assert [item.run_id for item in older.items] == [RUN_ID]
             assert older.items[0].total_count == 2
             assert older.next_before_run_id is None
-            assert list_saved_ranking_runs("other-job", None, None, 1).items == []
+            with pytest.raises(HTTPException) as forbidden:
+                list_saved_ranking_runs(access, "other-job", None, None, 1)
+            assert forbidden.value.status_code == 404
             with pytest.raises(HTTPException) as error:
-                get_saved_ranking_run(uuid4(), after_rank=0, limit=1)
+                get_saved_ranking_run(uuid4(), access, after_rank=0, limit=1)
             assert error.value.status_code == 404
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM candidate_source_grants WHERE candidate_id='CAND_0001'"
+                )
+            visible = get_saved_ranking_run(RUN_ID, access, after_rank=0, limit=5)
+            assert [item.candidate_id for item in visible.items] == ["CAND_0003"]
+            with pytest.raises(HTTPException) as revoked:
+                get_candidate_evidence(RUN_ID, "CAND_0001", access)
+            assert revoked.value.status_code == 404
         finally:
             conn.rollback()
 
 
 def test_saved_run_directory_requires_both_cursor_fields():
     with pytest.raises(HTTPException) as error:
-        list_saved_ranking_runs(None, datetime(2026, 9, 29, tzinfo=UTC), None, 25)
+        list_saved_ranking_runs(
+            RecruiterScope("demo", "alex", frozenset({"job-1"})),
+            None, datetime(2026, 9, 29, tzinfo=UTC), None, 25,
+        )
     assert error.value.status_code == 422

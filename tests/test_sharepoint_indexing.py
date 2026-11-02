@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from psycopg.conninfo import make_conninfo
 
 from sieve_app.api import create_app
+from tests.auth_support import FakeRecruiterIdentity
 from sieve_app.indexing_store import IndexingStore
 from sieve_app.indexing_worker import IndexingWorker
 from talent_ranker.storage import DriveFile
@@ -51,9 +52,10 @@ def test_source_preview_requires_recruiter_and_starts_exact_mapping(monkeypatch)
     screening = FastAPI()
     screening.state.settings = SimpleNamespace(recruiter_tokens={"secret": "recruiter"})
     app = create_app(ranking, screening, index_store=Jobs())
+    app.state.recruiter_identity = FakeRecruiterIdentity()
     with TestClient(app) as client:
         assert client.post("/api/sources/sharepoint/preview", json={"folder_url": FOLDER}).status_code == 401
-        headers = {"Authorization": "Bearer secret"}
+        headers = {"Cookie": "sieve_recruiter_session=secret"}
         preview = client.post("/api/sources/sharepoint/preview", headers=headers,
                               json={"folder_url": FOLDER})
         assert preview.status_code == 200, preview.text
@@ -139,12 +141,13 @@ def test_worker_reuses_existing_pipeline_and_records_progress(monkeypatch):
             return f"sharepoint://drive-1/{object_id}"
 
     class Pipeline:
-        def ingest_resume(self, candidate_id, path, source_uri, metadata):
+        def ingest_resume(self, candidate_id, path, source_uri, metadata, scope=None):
             assert candidate_id == "CAND_0001"
             assert path.read_bytes() == b"%PDF mock"
             assert source_uri == "sharepoint://drive-1/item-1"
             assert metadata["client_source_uri"] == "sharepoint://drive-1/item-1"
             assert metadata["job_title"] == "Reviewed role"
+            assert scope.actor_id == "recruiter"
 
     class Jobs:
         def __init__(self):

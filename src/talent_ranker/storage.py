@@ -9,6 +9,9 @@ from .identifiers import validate_candidate_id
 
 DRIVE_READONLY_SCOPE = ["https://www.googleapis.com/auth/drive.readonly"]
 
+class DriveConnectionError(ValueError):
+    """The saved Google Drive grant must be renewed by the recruiter."""
+
 
 @dataclass(frozen=True)
 class DriveFile:
@@ -113,9 +116,10 @@ def configured_canonical_store(settings) -> CanonicalObjectStore:
 class GoogleDriveStore:
     """Downloads private resume files from a user-authorized Google Drive account."""
 
-    def __init__(self, credentials_file: Path, token_file: Path):
+    def __init__(self, credentials_file: Path, token_file: Path, interactive: bool = True):
         self.credentials_file = credentials_file
         self.token_file = token_file
+        self.interactive = interactive
         self.client = self._build_client()
 
     def resume_name(self, file_id: str) -> str:
@@ -221,7 +225,18 @@ class GoogleDriveStore:
                 str(self.token_file), DRIVE_READONLY_SCOPE
             )
         if credentials and credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
+            from google.auth.exceptions import RefreshError
+
+            try:
+                credentials.refresh(Request())
+            except RefreshError as error:
+                if not self.interactive:
+                    raise DriveConnectionError(
+                        "Google Drive connection expired; reconnect in Resume sources"
+                    ) from error
+                credentials = None
+        if (not credentials or not credentials.valid) and not self.interactive:
+            raise DriveConnectionError("Google Drive connection expired; reconnect in Resume sources")
         if not credentials or not credentials.valid:
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(self.credentials_file), DRIVE_READONLY_SCOPE

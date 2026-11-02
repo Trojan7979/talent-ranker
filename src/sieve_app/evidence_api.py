@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from talent_ranker.identifiers import validate_candidate_id
 
+from .source_access import require_candidate_access
 from .source_api import Actor
 
 router = APIRouter(prefix='/api/sources', tags=['resume evidence'])
@@ -41,6 +42,7 @@ def candidate_evidence(candidate_id: str, actor: Actor, request: Request,
         validate_candidate_id(candidate_id)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
+    require_candidate_access(request, actor, [candidate_id])
     results = request.app.state.evidence_store.get_for_candidates([candidate_id])
     if candidate_id not in results:
         raise HTTPException(404, 'Candidate not found')
@@ -50,5 +52,6 @@ def candidate_evidence(candidate_id: str, actor: Actor, request: Request,
 
 @router.post('/evidence/batch', response_model=dict[str, list[ExternalEvidence]])
 def batch_evidence(body: EvidenceBatch, actor: Actor, request: Request, response: Response):
+    require_candidate_access(request, actor, body.candidate_ids)
     response.headers['Cache-Control'] = 'no-store'
     return request.app.state.evidence_store.get_for_candidates(body.candidate_ids)

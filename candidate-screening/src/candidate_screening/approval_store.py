@@ -7,12 +7,13 @@ _CAMPAIGN_COLUMNS = """id,job_id,ranking_run_id,job_profile_version_id,config_id
     selection_rule,proposed_candidate_ids,final_candidate_ids,message_template,
     expiry_hours,status,revision,approved_by,approved_at,created_at"""
 
-
 class ApprovalStoreMixin:
     def approve_campaign(
         self, campaign_id: UUID, expected_revision: int, actor: str, public_base_url: str
     ) -> dict[str, Any] | None:
         """Freeze membership and queue initial mail in one transaction."""
+        if not public_base_url:
+            raise ValueError("Configure SCREENING_PUBLIC_BASE_URL before approving invitations")
         with self.connection() as conn, conn.transaction(), conn.cursor() as cur:
             cur.execute("SELECT * FROM screening_campaigns WHERE id=%s FOR UPDATE", (campaign_id,))
             campaign = cur.fetchone()

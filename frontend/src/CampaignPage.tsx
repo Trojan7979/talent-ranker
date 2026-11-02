@@ -13,7 +13,7 @@ import { useRecruiterSession } from "./RecruiterLayout";
 export function CampaignPage() {
   const recruiterSession = useRecruiterSession();
   const { campaignId } = useParams();
-  const [token, setToken] = useState(recruiterSession.token);
+  const [token] = useState(recruiterSession.token);
   const [activeToken, setActiveToken] = useState(recruiterSession.token);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [results, setResults] = useState<ReviewPage | null>(null);
@@ -159,12 +159,8 @@ export function CampaignPage() {
       </header>
       {!activeToken && (
         <form onSubmit={connect} className="screening-panel">
-          <h2>Recruiter access</h2>
-          <label>Bearer token
-            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} required />
-          </label>
+          <h2>Screening campaign</h2>
           <button disabled={busy}>Open campaign</button>
-          <p className="hint">The token stays in this browser tab's memory.</p>
         </form>
       )}
       {error && <p className="error" role="alert">{error}</p>}

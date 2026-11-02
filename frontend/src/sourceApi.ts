@@ -10,7 +10,7 @@ export async function sourceRequest<T>(
 ): Promise<T> {
   const response = await fetch(`/api/sources${path}`, {
     method: body ? "POST" : "GET",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
     signal,

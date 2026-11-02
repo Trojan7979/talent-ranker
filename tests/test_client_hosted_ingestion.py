@@ -56,13 +56,15 @@ def test_sharepoint_cli_uses_client_source_without_configuring_copy_storage(monk
     source = object()
     monkeypatch.setattr(cli, "RankingPipeline", lambda _: pipeline)
     monkeypatch.setattr(cli, "sharepoint_store", lambda: source)
+    monkeypatch.setattr(cli, "cli_scope", lambda _: SimpleNamespace(actor_id="recruiter"))
 
     def forbidden_copy():
         pytest.fail("SharePoint must not initialize canonical storage")
 
-    def ingest(actual_pipeline, actual_source, folder_url, manifest, progress):
+    def ingest(actual_pipeline, actual_source, folder_url, manifest, progress, scope):
         assert (actual_pipeline, actual_source) == (pipeline, source)
         assert folder_url == "folder" and manifest == Path("manifest.csv")
+        assert scope.actor_id == "recruiter"
         return SimpleNamespace(indexed=1, skipped=0, failures=[])
 
     monkeypatch.setattr(cli, "canonical_store", forbidden_copy)

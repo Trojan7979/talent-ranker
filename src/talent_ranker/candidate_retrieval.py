@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from .access import RecruiterScope
 from .ranking import reciprocal_rank_fusion
 from .schemas import HiringPriorities
 
 
-def retrieve_pool(repo, encoder, query: str, priorities: HiringPriorities, limit: int, rrf_k: int):
+def retrieve_pool(
+    repo, encoder, query: str, priorities: HiringPriorities, limit: int, rrf_k: int,
+    scope: RecruiterScope,
+):
     """Union holistic and explicit requirement searches before the reranking cutoff."""
     requirements = dict.fromkeys(
         value.strip()
@@ -21,7 +25,7 @@ def retrieve_pool(repo, encoder, query: str, priorities: HiringPriorities, limit
     records: dict[str, dict] = {}
     traces: list[dict] = []
     for index, (text, vector) in enumerate(zip(queries, vectors, strict=True)):
-        dense, lexical, found = repo.retrieve(text, vector, limit)
+        dense, lexical, found = repo.retrieve(text, vector, limit, scope)
         traces.append({"query_index": index, "dense_ids": dense, "lexical_ids": lexical})
         for candidate_id, score in reciprocal_rank_fusion(dense, lexical, rrf_k).items():
             scores[candidate_id] = max(scores.get(candidate_id, 0.0), score)

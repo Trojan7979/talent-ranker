@@ -179,12 +179,16 @@ class IndexingStore(DriveOAuthStateMixin, IdentityApprovalMixin):
             )
             return cur.fetchone()
 
-    def claim_next(self) -> dict[str, Any] | None:
+    def claim_next(self, actor_id: str | None = None) -> dict[str, Any] | None:
         with self.pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
             cur.execute(
                 """SELECT id FROM sharepoint_ingestion_jobs
-                   WHERE status='pending' OR (status='running' AND leased_until<now())
-                   ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1"""
+                   WHERE (status='pending' OR (status='running' AND leased_until<now()))
+                     AND (%s::text IS NULL OR created_by=%s)
+                     AND (folder_url NOT LIKE 'https://drive.google.com/%%'
+                          OR created_by ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+                   ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1""",
+                (actor_id, actor_id),
             )
             row = cur.fetchone()
             if row is None:

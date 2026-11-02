@@ -1,13 +1,15 @@
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
+from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from sieve_app import drive_api, indexing_worker
+from sieve_app import drive_account, drive_api, indexing_worker
 from sieve_app.indexing_worker import IndexingWorker
+from tests.auth_support import FakeRecruiterIdentity
 from talent_ranker.drive_links import drive_id
 from talent_ranker.drive_source import DriveResumeSource
 from talent_ranker.storage import DriveFile
@@ -35,6 +37,23 @@ def test_drive_links_select_one_file_or_a_folder():
     assert len(source.list_resumes(folder_url)) == 2
 
 
+def test_recruiter_drive_connection_never_falls_back_to_shared_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(drive_account.SETTINGS, "google_token_file", str(tmp_path / "legacy.json"))
+    (tmp_path / "legacy.json").write_text("{}", encoding="utf-8")
+    first, second = str(uuid4()), str(uuid4())
+    first_path = drive_account.token_file(first)
+    assert first_path != drive_account.token_file(second)
+    with pytest.raises(HTTPException) as missing_first:
+        drive_account.require_token(first)
+    assert missing_first.value.status_code == 503
+    first_path.parent.mkdir()
+    first_path.write_text("{}", encoding="utf-8")
+    assert drive_account.require_token(first) == first_path
+    with pytest.raises(HTTPException) as missing_second:
+        drive_account.require_token(second)
+    assert missing_second.value.status_code == 503
+
+
 def test_drive_preview_and_analysis_use_recruiter_review_queue(monkeypatch):
     file_url = "https://drive.google.com/file/d/resume_123/view"
     submitted = []
@@ -50,15 +69,15 @@ def test_drive_preview_and_analysis_use_recruiter_review_queue(monkeypatch):
             return {"id": uuid4(), "status": "pending", "entries": [], "discovered": 0,
                     "indexed": 0, "skipped": 0, "failures": []}
 
-    monkeypatch.setattr(drive_api, "_drive_ready", lambda: None)
-    monkeypatch.setattr(drive_api, "configured_drive_source", Source)
+    monkeypatch.setattr(drive_api, "require_token", lambda actor: Path("recruiter-token.json"))
+    monkeypatch.setattr(drive_api, "configured_drive_source", lambda **kwargs: Source())
     app = FastAPI()
-    app.state.screening_settings = SimpleNamespace(recruiter_tokens={"secret": "recruiter"})
+    app.state.recruiter_identity = FakeRecruiterIdentity()
     app.state.index_store = Jobs()
     app.include_router(drive_api.router)
     with TestClient(app) as client:
         assert client.post("/api/sources/drive/preview", json={"location": file_url}).status_code == 401
-        headers = {"Authorization": "Bearer secret"}
+        headers = {"Cookie": "sieve_recruiter_session=secret"}
         preview = client.post("/api/sources/drive/preview", json={"location": file_url},
                               headers=headers)
         assert preview.status_code == 200
@@ -85,10 +104,11 @@ def test_drive_indexing_job_uses_selected_file_and_persists_drive_source(monkeyp
             return f"gdrive://{file_id}"
 
     class Pipeline:
-        def ingest_resume(self, candidate_id, path, source_uri, metadata):
+        def ingest_resume(self, candidate_id, path, source_uri, metadata, scope=None):
             assert candidate_id == "CAND_0001"
             assert path.suffix == ".pdf"
             assert source_uri == metadata["client_source_uri"] == "gdrive://resume_123"
+            assert scope.actor_id == "recruiter"
 
     class Jobs:
         def __init__(self):
@@ -109,7 +129,8 @@ def test_drive_indexing_job_uses_selected_file_and_persists_drive_source(monkeyp
         def finish(self, job_id, attempt, discovered, skipped):
             assert (discovered, skipped) == (1, 0)
 
-    monkeypatch.setattr(indexing_worker, "configured_drive_source", Source)
+    monkeypatch.setattr(indexing_worker, "token_file", lambda actor: Path("recruiter-token.json"))
+    monkeypatch.setattr(indexing_worker, "configured_drive_source", lambda **kwargs: Source())
     jobs = Jobs()
     assert IndexingWorker(jobs, Pipeline()).run_once()
     assert jobs.result is None
@@ -127,7 +148,7 @@ def test_drive_oauth_callback_requires_same_browser_and_one_use_state(monkeypatc
         def authorization_url(self, state, verifier, nonce):
             return f"https://accounts.google.com/auth?state={state}"
 
-        def complete(self, state, verifier, nonce, code):
+        def complete(self, state, verifier, nonce, code, token_file):
             completed.append(code)
 
     class Jobs:
@@ -138,15 +159,16 @@ def test_drive_oauth_callback_requires_same_browser_and_one_use_state(monkeypatc
             return saved.pop(digest, None)
 
     monkeypatch.setattr(drive_api, "DriveWebOAuth", OAuth)
+    monkeypatch.setattr(drive_api, "token_file", lambda actor: Path("recruiter-token.json"))
     app = FastAPI()
-    app.state.screening_settings = SimpleNamespace(recruiter_tokens={"secret": "recruiter"})
+    app.state.recruiter_identity = FakeRecruiterIdentity({"secret": "recruiter", "other": "other-recruiter"})
     app.state.index_store = Jobs()
     app.include_router(drive_api.router)
     with TestClient(app) as client:
-        response = client.post("/api/sources/drive/connect", json={},
-                               headers={"Authorization": "Bearer secret"})
-        assert response.status_code == 200
-        state = parse_qs(urlparse(response.json()["authorization_url"]).query)["state"][0]
+        client.cookies.set("sieve_recruiter_session", "secret")
+        response = client.get("/api/sources/drive/connect", follow_redirects=False)
+        assert response.status_code == 307
+        state = parse_qs(urlparse(response.headers["location"]).query)["state"][0]
         callback = f"/api/sources/drive/oauth/callback?state={state}&code=authorization-code"
         assert TestClient(app).get(callback).status_code == 400
         result = client.get(callback, follow_redirects=False)
@@ -154,3 +176,9 @@ def test_drive_oauth_callback_requires_same_browser_and_one_use_state(monkeypatc
         assert result.headers["location"].endswith("/sources?source=drive&drive=connected")
         assert completed == ["authorization-code"]
         assert client.get(callback).status_code == 400
+        second = client.get("/api/sources/drive/connect", follow_redirects=False)
+        second_state = parse_qs(urlparse(second.headers["location"]).query)["state"][0]
+        client.cookies.set("sieve_recruiter_session", "other")
+        swapped = client.get(f"/api/sources/drive/oauth/callback?state={second_state}&code=other-code")
+        assert swapped.status_code == 403
+        assert completed == ["authorization-code"]

@@ -3,10 +3,9 @@
 import hashlib
 import json
 import secrets
-from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from googleapiclient.errors import HttpError
 from pydantic import BaseModel, Field
@@ -14,8 +13,11 @@ from pydantic import BaseModel, Field
 from talent_ranker.config import SETTINGS
 from talent_ranker.drive_links import drive_id
 from talent_ranker.drive_source import configured_drive_source
+from talent_ranker.storage import DriveConnectionError
 
+from .drive_account import require_token, token_file
 from .drive_web_oauth import DriveWebOAuth
+from .recruiter_identity import actor_for
 from .source_api import (
     Actor,
     ApproveIndexing,
@@ -46,23 +48,19 @@ def _drive_location(value: str) -> str:
             f"https://drive.google.com/drive/folders/{file_id}")
 
 
-def _drive_ready() -> None:
-    if not Path(SETTINGS.google_token_file).is_file():
-        raise HTTPException(status_code=503, detail="Connect Google Drive on this page first")
-
-
 @router.get("/connection")
-def drive_connection(actor: Actor) -> dict[str, bool]:
+def drive_connection(actor: Actor, request: Request) -> dict[str, bool | str]:
     try:
-        token = json.loads(Path(SETTINGS.google_token_file).read_text(encoding="utf-8"))
+        token = json.loads(token_file(actor).read_text(encoding="utf-8"))
         connected = bool(token.get("refresh_token"))
     except (OSError, ValueError, AttributeError):
         connected = False
-    return {"connected": connected}
+    base = request.app.state.recruiter_identity.settings.public_base_url.rstrip("/")
+    return {"connected": connected, "connect_url": f"{base}/api/sources/drive/connect"}
 
 
-@router.post("/connect")
-def connect_drive(actor: Actor, request: Request, response: Response) -> dict[str, str]:
+@router.get("/connect")
+def connect_drive(actor: Actor, request: Request):
     state, verifier, nonce = (secrets.token_urlsafe(size) for size in (32, 64, 32))
     try:
         url = DriveWebOAuth(SETTINGS).authorization_url(state, verifier, nonce)
@@ -71,13 +69,14 @@ def connect_drive(actor: Actor, request: Request, response: Response) -> dict[st
     request.app.state.index_store.save_drive_oauth_state(
         hashlib.sha256(state.encode()).hexdigest(), actor, verifier, nonce,
     )
+    response = RedirectResponse(url)
     response.set_cookie(
         COOKIE, state, max_age=600, httponly=True, samesite="lax",
         secure=SETTINGS.google_web_redirect_uri.startswith("https://"),
         path="/api/sources/drive/oauth",
     )
     response.headers["Cache-Control"] = "no-store"
-    return {"authorization_url": url}
+    return response
 
 
 @router.get("/oauth/callback")
@@ -90,12 +89,16 @@ def drive_callback(request: Request, state: str, code: str | None = None,
     )
     if saved is None:
         raise HTTPException(status_code=400, detail="Drive connection link was already used or expired; start again")
+    actor = actor_for(request)
+    if saved["actor"] != actor:
+        raise HTTPException(status_code=403, detail="Drive connection belongs to another recruiter")
     if error:
         raise HTTPException(status_code=400, detail="Google did not grant Drive access; start again")
     if not code:
         raise HTTPException(status_code=400, detail="Google returned without an authorization code; start again")
     try:
-        DriveWebOAuth(SETTINGS).complete(state, saved["code_verifier"], saved["nonce"], code)
+        DriveWebOAuth(SETTINGS).complete(state, saved["code_verifier"], saved["nonce"],
+                                         code, token_file(actor))
     except (ValueError, OSError) as failure:
         raise HTTPException(status_code=400, detail=str(failure)) from failure
     url = f"{SETTINGS.frontend_base_url.rstrip('/')}/sources?source=drive&drive=connected"
@@ -108,14 +111,16 @@ def drive_callback(request: Request, state: str, code: str | None = None,
 
 @router.post("/preview", response_model=FolderPreview)
 def preview_drive(details: DriveRequest, actor: Actor) -> FolderPreview:
-    _drive_ready()
+    path = require_token(actor)
     try:
         location = _drive_location(details.location)
-        files = configured_drive_source().list_resumes(location)
+        files = configured_drive_source(interactive=False, token_file=path).list_resumes(location)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except HttpError as error:
         raise HTTPException(status_code=502, detail="Could not read the Google Drive location") from error
+    except DriveConnectionError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     if len(files) > 1000:
         raise HTTPException(status_code=409, detail="Location has more than 1000 resumes")
     return FolderPreview(folder_url=location, files=[
@@ -126,7 +131,7 @@ def preview_drive(details: DriveRequest, actor: Actor) -> FolderPreview:
 
 @router.post("/analyze", response_model=IndexingJob, status_code=202)
 def analyze_drive(details: AnalyzeDrive, actor: Actor, request: Request) -> IndexingJob:
-    _drive_ready()
+    require_token(actor)
     try:
         row = request.app.state.index_store.submit_analysis(
             details.request_id, _drive_location(details.location), actor,

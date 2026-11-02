@@ -147,18 +147,20 @@ export function ShortlistPage() {
       </p>}
       <form className="identity-access" onSubmit={(event) => {
         event.preventDefault();
+        setRun(null);
+        setCandidates([]);
+        setSelected(new Set());
         setIdentities({});
         setIdentityLoaded(false);
         setIdentityError(null);
+        recruiterSession.setToken(token.trim());
         setActiveToken(token.trim());
+        setRequestCursor(0);
+        setRetry((value) => value + 1);
         setIdentityRequest((value) => value + 1);
       }}>
-        <label>Recruiter access for candidate names
-          <input type="password" autoComplete="off" value={token}
-            onChange={(event) => setToken(event.target.value)} required />
-        </label>
         <button type="submit">{identityLoaded ? "Refresh candidate names" : "Show candidate names"}</button>
-        <span className="hint">Access is shared across recruiter pages in this tab. IDs remain for matching and audit.</span>
+        <span className="hint">Candidate IDs remain for matching and audit.</span>
       </form>
       {identityError && <p className="error" role="alert">{identityError}</p>}
       {run && candidates.length > 0 && (
@@ -193,7 +195,7 @@ export function ShortlistPage() {
                 setNameDraft(identities[candidate.candidate_id]?.display_name ?? "");
               }}>{identities[candidate.candidate_id]?.display_name ? "Correct name" : "Add verified name"}</button>}
             </div>
-            <strong>Ranking score {Math.round(candidate.score * 100)}%</strong>
+            <strong title="Relative ranking index, not a probability of job fit">Ranking index {Math.round(candidate.score * 100)}/100</strong>
             {editingNameId === candidate.candidate_id && <form className="name-review-form"
               onSubmit={(event) => saveName(event, candidate.candidate_id)}>
               <label>Verified name from the resume

@@ -85,7 +85,7 @@ class UpdateJobProfileRequest(BaseModel):
 
 
 class ApproveJobProfileRequest(BaseModel):
-    approved_by: str = Field(min_length=1)
+    approved_by: str | None = None  # Legacy clients; identity comes from the recruiter token.
 
 
 class JobProfileResponse(BaseModel):

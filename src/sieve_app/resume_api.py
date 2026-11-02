@@ -1,6 +1,5 @@
 """Authenticated access to source originals; no document content is proxied."""
 
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -12,7 +11,10 @@ from talent_ranker.config import SETTINGS
 from talent_ranker.drive_source import configured_drive_source
 from talent_ranker.identifiers import validate_candidate_id
 from talent_ranker.sharepoint import configured_sharepoint_source
+from talent_ranker.storage import DriveConnectionError
 
+from .drive_account import require_token
+from .source_access import require_candidate_access
 from .source_api import Actor, _configured
 
 router = APIRouter(prefix="/api/sources", tags=["resume sources"])
@@ -32,6 +34,7 @@ def get_resume_source(candidate_id: str, actor: Actor, request: Request,
         candidate_id = validate_candidate_id(candidate_id)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    require_candidate_access(request, actor, [candidate_id])
     row = request.app.state.index_store.get_candidate_source(candidate_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Candidate resume not found")
@@ -40,9 +43,10 @@ def get_resume_source(candidate_id: str, actor: Actor, request: Request,
         _configured()
         source = configured_sharepoint_source(SETTINGS)
     elif source_uri.startswith("gdrive://"):
-        if not Path(SETTINGS.google_token_file).is_file():
-            raise HTTPException(status_code=503, detail="Google Drive is not connected")
-        source = configured_drive_source()
+        try:
+            source = configured_drive_source(interactive=False, token_file=require_token(actor))
+        except DriveConnectionError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
     else:
         raise HTTPException(status_code=404, detail="No connected source is linked to this resume")
     try:

@@ -6,7 +6,7 @@ import { useRecruiterSession } from "./RecruiterLayout";
 
 export function CampaignsPage() {
   const recruiterSession = useRecruiterSession();
-  const [tokenInput, setTokenInput] = useState(recruiterSession.token);
+  const [tokenInput] = useState(recruiterSession.token);
   const [token, setToken] = useState(recruiterSession.token);
   const [jobInput, setJobInput] = useState("");
   const [jobFilter, setJobFilter] = useState<string | null>(null);
@@ -58,9 +58,6 @@ export function CampaignsPage() {
         <p>Find a proposed or approved campaign and continue the recruiter workflow.</p>
       </header>
       <form onSubmit={load}>
-        <label htmlFor="campaign-access">Recruiter access token</label>
-        <input id="campaign-access" type="password" autoComplete="off" required
-          value={tokenInput} onChange={(event) => setTokenInput(event.target.value)} />
         <label htmlFor="campaign-job-filter">Filter by job ID</label>
         <input id="campaign-job-filter" value={jobInput}
           onChange={(event) => setJobInput(event.target.value)} placeholder="All jobs" />

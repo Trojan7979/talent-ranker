@@ -12,6 +12,7 @@ from .batch_ingestion import (
     write_drive_inventory,
     write_inventory,
 )
+from .cli_access import cli_scope
 from .config import SETTINGS
 from .drive_links import drive_id
 from .pipeline import RankingPipeline
@@ -86,6 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
     rank.add_argument("--profile-version-id", required=True)
     rank.add_argument("--output", type=Path, default=Path("ranking.csv"))
     rank.add_argument("--top-k", type=int, default=100)
+    for command in (ingest, ingest_drive, batch, sp_batch, rank):
+        command.add_argument("--actor-id", help="Recruiter actor; inferred only in a single-recruiter demo")
     audit = sub.add_parser("privacy-audit", help="Scan stored text for supported contact PII")
     audit.add_argument("--fail-on-findings", action="store_true")
     return parser
@@ -141,6 +144,7 @@ def run_privacy_audit(fail_on_findings: bool) -> None:
 
 def run_pipeline_command(args: argparse.Namespace) -> None:
     pipeline = RankingPipeline(SETTINGS)
+    scope = cli_scope(getattr(args, "actor_id", None))
     try:
         if args.command == "ingest":
             metadata = read_metadata(args.metadata) or {}
@@ -150,6 +154,7 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
                 args.resume,
                 store_canonical_resume(canonical_store(), args.candidate_id, args.resume),
                 metadata,
+                scope=scope,
             )
         elif args.command == "ingest-drive":
             with tempfile.TemporaryDirectory(prefix="talent-ranker-ingest-") as directory:
@@ -165,6 +170,7 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
                     local,
                     source_uri,
                     metadata,
+                    scope=scope,
                 )
         elif args.command == "ingest-drive-folder":
             report = ingest_drive_folder(
@@ -174,6 +180,7 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
                 args.manifest,
                 print,
                 canonical_store(),
+                scope,
             )
             print(
                 f"complete: {report.indexed} indexed, {len(report.failures)} failed, "
@@ -185,6 +192,7 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
         elif args.command == "ingest-sharepoint-folder":
             report = ingest_sharepoint_folder(
                 pipeline, sharepoint_store(), args.folder_url, args.manifest, print,
+                scope=scope,
             )
             print(
                 f"complete: {report.indexed} indexed, {len(report.failures)} failed, "
@@ -201,7 +209,7 @@ def run_pipeline_command(args: argparse.Namespace) -> None:
                 raise ValueError("job profile does not belong to requested job")
             if profile["status"] != "approved":
                 raise ValueError("job profile must be approved before ranking")
-            run_id, results = pipeline.rank(args.job_id, profile, args.top_k)
+            run_id, results = pipeline.rank(args.job_id, profile, args.top_k, scope)
             write_outputs(results, args.output)
             print(f"saved run {run_id}: {args.output} and {args.output.with_suffix('.jsonl')}")
     finally:

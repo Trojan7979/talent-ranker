@@ -7,6 +7,10 @@
 .source-file-list { display: grid; gap: 8px; max-height: 480px; overflow: auto; margin: 18px 0; }
 .source-file { display: grid; grid-template-columns: minmax(0, 1fr) 180px; align-items: center; gap: 12px; }
 .source-file span { overflow-wrap: anywhere; }
+.source-bulk-selection { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 12px; border: 1px solid #d9deea; border-radius: 8px; }
+.source-bulk-selection label { display: grid; gap: 4px; }
+.source-bulk-selection input { width: 100px; }
+.source-bulk-selection p { flex-basis: 100%; margin: 0; color: #62708a; }
 .resume-source-card { grid-column: 1 / -1; display: grid; justify-items: start; gap: 8px; padding: 12px; border: 1px solid #d9deea; border-radius: 8px; overflow-wrap: anywhere; }
 .resume-source-card p { margin: 0; }
 .resume-source-card small { color: #62708a; }

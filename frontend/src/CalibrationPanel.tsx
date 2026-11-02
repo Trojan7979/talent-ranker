@@ -3,10 +3,8 @@ import { CompensationFields } from "./CompensationFields";
 
 type Props = {
   profile: JobProfile;
-  approvedBy: string;
   busy: boolean;
   onChange: (profile: JobProfile) => void;
-  onApprovedByChange: (value: string) => void;
   onApproveAndRank: () => void;
 };
 
@@ -16,10 +14,8 @@ const optionalNumber = (value: string) => (value ? Number(value) : null);
 
 export function CalibrationPanel({
   profile,
-  approvedBy,
   busy,
   onChange,
-  onApprovedByChange,
   onApproveAndRank,
 }: Props) {
   const priorities = profile.priorities;
@@ -154,11 +150,7 @@ export function CalibrationPanel({
         value={priorities.compensation}
         onChange={(compensation) => update({ compensation })}
       />
-      <label>
-        Approved by
-        <input value={approvedBy} onChange={(event) => onApprovedByChange(event.target.value)} />
-      </label>
-      <button type="button" onClick={onApproveAndRank} disabled={busy || !approvedBy.trim()}>
+      <button type="button" onClick={onApproveAndRank} disabled={busy}>
         {busy
           ? "Working..."
           : profile.status === "draft"

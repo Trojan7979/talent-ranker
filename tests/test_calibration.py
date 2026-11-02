@@ -110,7 +110,10 @@ class FakeRankingRepository:
         self.query = ""
         self.saved_profile_version_id = ""
 
-    def retrieve(self, query, embedding, limit):
+    def assert_embedding_ready(self, scope):
+        pass
+
+    def retrieve(self, query, embedding, limit, scope):
         self.query = query
         return (
             ["CAND_0001"],
@@ -123,14 +126,14 @@ class FakeRankingRepository:
             },
         )
 
-    def get_candidate_chunks(self, candidate_ids):
+    def get_candidate_chunks(self, candidate_ids, scope):
         return {
             "CAND_0001": [
                 {"ordinal": 0, "section": "experience", "content": "Built Python systems."}
             ]
         }
 
-    def save_run(self, job_id, profile_version_id, jd, models, config, results):
+    def save_run(self, job_id, profile_version_id, jd, models, config, results, scope):
         self.saved_profile_version_id = profile_version_id
         return "run-1"
 
@@ -147,8 +150,8 @@ def test_pipeline_ranks_with_and_records_approved_profile_version():
             "retrieval_limit": 10,
             "rerank_limit": 10,
             "rrf_k": 60,
-            "embedding_model": "embedding",
-            "reranker_model": "reranker",
+            "hosted_embedding_model": "embedding",
+            "hosted_reranker_model": "reranker",
         },
     )()
     job_profile = {
@@ -161,7 +164,13 @@ def test_pipeline_ranks_with_and_records_approved_profile_version():
         ).model_dump(mode="json"),
     }
 
-    run_id, results = pipeline.rank("senior-ai-engineer", job_profile)
+    from talent_ranker.access import RecruiterScope
+
+    run_id, results = pipeline.rank(
+        "senior-ai-engineer", job_profile, scope=RecruiterScope(
+            "demo", "recruiter", frozenset({"senior-ai-engineer"})
+        )
+    )
 
     assert run_id == "run-1"
     assert pipeline.repo.query == "Python"

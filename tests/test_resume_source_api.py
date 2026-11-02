@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
 import requests
@@ -6,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from sieve_app import resume_api
+from tests.auth_support import FakeRecruiterIdentity
 from talent_ranker.storage import DriveFile
 
 URL = "https://contoso.sharepoint.com/sites/Recruiting/Resumes/jane.pdf"
@@ -36,6 +38,13 @@ def source_client(monkeypatch):
     app = FastAPI()
     app.state.index_store = Store()
     app.state.screening_settings = SimpleNamespace(recruiter_tokens={"secret": "recruiter"})
+    app.state.recruiter_identity = FakeRecruiterIdentity()
+    app.state.agent_settings = SimpleNamespace(workspace_id="demo")
+    app.state.ranking_service = SimpleNamespace(state=SimpleNamespace(
+        pipeline=SimpleNamespace(repo=SimpleNamespace(
+            accessible_candidate_ids=lambda ids, scope: set(ids)
+        ))
+    ))
     app.include_router(resume_api.router)
     with TestClient(app) as client:
         yield client, state
@@ -43,14 +52,14 @@ def source_client(monkeypatch):
 
 def fetch(client, candidate_id="CAND_0001"):
     return client.get(f"/api/sources/candidates/{candidate_id}/resume",
-                      headers={"Authorization": "Bearer secret"})
+                      headers={"Cookie": "sieve_recruiter_session=secret"})
 
 
 def test_source_lookup_requires_recruiter_access_before_calling_sharepoint(source_client):
     client, state = source_client
     path = "/api/sources/candidates/CAND_0001/resume"
     assert client.get(path).status_code == 401
-    assert client.get(path, headers={"Authorization": "Bearer wrong"}).status_code == 403
+    assert client.get(path, headers={"Cookie": "sieve_recruiter_session=wrong"}).status_code == 401
     assert not state.calls
     assert fetch(client, "invalid").status_code == 422
 
@@ -106,8 +115,8 @@ def test_drive_original_is_resolved_for_indexed_resume(source_client, monkeypatc
             assert source_uri == "gdrive://resume_123"
             return DriveFile("resume_123", "mine.pdf", web_url=url)
 
-    monkeypatch.setattr(resume_api.Path, "is_file", lambda path: True)
-    monkeypatch.setattr(resume_api, "configured_drive_source", DriveSource)
+    monkeypatch.setattr(resume_api, "require_token", lambda actor: Path("recruiter-token.json"))
+    monkeypatch.setattr(resume_api, "configured_drive_source", lambda **kwargs: DriveSource())
     result = fetch(client)
     assert result.status_code == 200
     assert result.json()["web_url"] == url

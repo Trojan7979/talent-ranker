@@ -88,13 +88,17 @@ class LLMPriorityExtractor:
     ):
         if not api_key.strip():
             raise CalibrationError("calibration model API key is not configured")
+        if not model.strip():
+            raise CalibrationError("calibration model ID is not configured")
         parsed_url = urlparse(api_url)
         if parsed_url.scheme != "https" or not parsed_url.netloc:
             raise CalibrationError("calibration model URL must use HTTPS")
         self.api_url, self.api_key, self.model = api_url, api_key, model
         self.timeout, self.post = timeout, post
+        self.last_usage: dict | None = None
 
     def extract(self, job_description: str) -> HiringPriorities:
+        self.last_usage = None
         body = {
             "model": self.model,
             "messages": [
@@ -102,9 +106,13 @@ class LLMPriorityExtractor:
                 {"role": "user", "content": f"Job description:\n{job_description}"},
             ],
             "max_tokens": 4096,
-            "temperature": 1,
+            "temperature": 0,
             "stream": False,
         }
+        # Criteria extraction needs a short JSON answer; extended reasoning can
+        # consume the entire output budget before the model returns that JSON.
+        if self.model == "deepseek-ai/DeepSeek-V4-Pro":
+            body["enable_thinking"] = False
         request = Request(
             self.api_url,
             data=json.dumps(body).encode("utf-8"),
@@ -112,11 +120,21 @@ class LLMPriorityExtractor:
             method="POST",
         )
         response = self.post(request, self.timeout)
+        self.last_usage = response.get("usage") if isinstance(response.get("usage"), dict) else None
         try:
             choice = response["choices"][0]
             if choice.get("finish_reason") != "stop":
                 raise ValueError("incomplete model output")
-            raw = json.loads(choice["message"]["content"])
+            content = choice["message"]["content"]
+            try:
+                raw = json.loads(content)
+            except json.JSONDecodeError:
+                # Some compatible chat endpoints wrap an otherwise valid JSON
+                # object in Markdown or a short preface.
+                match = re.search(r'\{\s*"facts"\s*:', content)
+                if match is None:
+                    raise
+                raw, _ = json.JSONDecoder().raw_decode(content[match.start():])
             facts = ExtractedFacts.model_validate(raw).facts
             if not facts:
                 raise ValueError("no criteria extracted")

@@ -33,12 +33,11 @@ export type SelectionPreview = {
 };
 
 const base = "/api/screening";
-const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
-
 async function request<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
+  void token;
   const response = await fetch(`${base}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...auth(token) },
+    headers: { "Content-Type": "application/json" },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -56,9 +55,8 @@ export const batchApi = {
   configVersion: (jobId: string, version: number, token: string) =>
     request<JobConfig>(`/jobs/${encodeURIComponent(jobId)}/configs/${version}`, token),
   latestConfig: async (jobId: string, token: string): Promise<JobConfig | null> => {
-    const response = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}/latest-config`, {
-      headers: auth(token),
-    });
+    void token;
+    const response = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}/latest-config`);
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`Question configuration: HTTP ${response.status}`);
     return response.json();

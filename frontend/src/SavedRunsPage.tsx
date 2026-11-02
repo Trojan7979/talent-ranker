@@ -2,16 +2,27 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listSavedRuns } from "./api";
 import type { SavedRunCursor, SavedRunSummary } from "./api";
+import { RecruiterTokenField } from "./RecruiterTokenField";
+import { useRecruiterSession } from "./RecruiterLayout";
 
 export function SavedRunsPage() {
+  const { token } = useRecruiterSession();
   const [jobInput, setJobInput] = useState("");
   const [jobFilter, setJobFilter] = useState<string | null>(null);
   const [cursor, setCursor] = useState<SavedRunCursor | null>(null);
   const [nextCursor, setNextCursor] = useState<SavedRunCursor | null>(null);
   const [items, setItems] = useState<SavedRunSummary[]>([]);
+  const [loadedForToken, setLoadedForToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    setItems([]);
+    setNextCursor(null);
+    setCursor(null);
+    setLoadedForToken("");
+  }, [token]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -20,6 +31,7 @@ export function SavedRunsPage() {
     listSavedRuns(jobFilter, cursor, controller.signal)
       .then((page) => {
         setItems((previous) => cursor ? [...previous, ...page.items] : page.items);
+        setLoadedForToken(token);
         setNextCursor(page.next_before_created_at && page.next_before_run_id
           ? { createdAt: page.next_before_created_at, runId: page.next_before_run_id }
           : null);
@@ -33,7 +45,9 @@ export function SavedRunsPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [jobFilter, cursor, retry]);
+  }, [jobFilter, cursor, retry, token]);
+
+  const visibleItems = loadedForToken === token ? items : [];
 
   function applyFilter(event: FormEvent) {
     event.preventDefault();
@@ -50,6 +64,7 @@ export function SavedRunsPage() {
         <h1>Saved shortlists</h1>
         <p>Open a previous ranking run to review candidates or prepare a screening batch.</p>
       </header>
+      <RecruiterTokenField />
       <form onSubmit={applyFilter}>
         <label htmlFor="shortlist-job-filter">Filter by job ID</label>
         <input id="shortlist-job-filter" value={jobInput}
@@ -57,9 +72,9 @@ export function SavedRunsPage() {
         <button type="submit">Apply filter</button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}
-      {!loading && !error && items.length === 0 && <p>No saved shortlists found.</p>}
+      {!loading && !error && visibleItems.length === 0 && <p>No saved shortlists found.</p>}
       <section className="shortlist-grid" aria-label="Saved ranking runs">
-        {items.map((run) => (
+        {visibleItems.map((run) => (
           <article key={run.run_id} className="result-card">
             <div>
               <h2>{run.job_id}</h2>

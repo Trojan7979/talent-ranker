@@ -15,9 +15,7 @@ class AgentSettings(BaseSettings):
     model: str = ""
     api_key: SecretStr | None = None
     base_url: str = ""
-    workspace_id: str = "demo"
-    # Explicit demo scope; this does not provide tenant isolation for legacy APIs.
-    allowed_jobs_by_actor: dict[str, set[str]] = Field(default_factory=dict)
+    workspace_id: str = ""
     max_model_turns: int = Field(default=8, ge=1, le=20)
     max_tool_calls: int = Field(default=12, ge=1, le=40)
     execution_timeout_seconds: float = Field(default=90, gt=0, le=300)
@@ -45,11 +43,6 @@ class AgentSettings(BaseSettings):
             missing.append("SIEVE_AGENT_BASE_URL")
         if not self.workspace_id:
             missing.append("SIEVE_AGENT_WORKSPACE_ID")
-        if not self.allowed_jobs_by_actor or any(
-            not actor.strip() or not jobs or any(not job.strip() for job in jobs)
-            for actor, jobs in self.allowed_jobs_by_actor.items()
-        ):
-            missing.append("SIEVE_AGENT_ALLOWED_JOBS_BY_ACTOR")
         if missing:
             raise AgentConfigurationError("Configure " + ", ".join(missing))
 
@@ -72,7 +65,3 @@ class AgentSettings(BaseSettings):
             )
         if self.model_timeout_seconds > self.execution_timeout_seconds:
             raise AgentConfigurationError("Model timeout must not exceed execution timeout")
-
-    def allowed_job_ids(self, actor: str) -> frozenset[str]:
-        """Fail closed for unknown actors; callers must authenticate the actor first."""
-        return frozenset(self.allowed_jobs_by_actor.get(actor, ()))

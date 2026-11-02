@@ -8,7 +8,9 @@ import logging
 import tempfile
 from pathlib import Path
 from threading import Event
+from uuid import UUID
 
+from talent_ranker.access import RecruiterScope
 from talent_ranker.batch_ingestion import ManifestEntry, ingest_source_entries
 from talent_ranker.config import SETTINGS
 from talent_ranker.documents import extract_resume
@@ -16,6 +18,8 @@ from talent_ranker.drive_source import configured_drive_source
 from talent_ranker.pipeline import RankingPipeline
 from talent_ranker.sharepoint import configured_sharepoint_source
 
+from .agent_config import AgentSettings
+from .drive_account import token_file
 from .indexing_store import IndexingStore
 from .resume_identity import extract_identity
 
@@ -23,17 +27,21 @@ logger = logging.getLogger(__name__)
 
 
 class IndexingWorker:
-    def __init__(self, store: IndexingStore, pipeline: RankingPipeline):
+    def __init__(self, store: IndexingStore, pipeline: RankingPipeline,
+                 actor_id: str | None = None):
         self.store = store
         self.pipeline = pipeline
+        self.actor_id = actor_id
 
     def run_once(self) -> bool:
-        job = self.store.claim_next()
+        job = (self.store.claim_next(self.actor_id) if self.actor_id is not None
+               else self.store.claim_next())
         if job is None:
             return False
         try:
             is_drive = job["folder_url"].startswith("https://drive.google.com/")
-            source = configured_drive_source() if is_drive else configured_sharepoint_source(SETTINGS)
+            source = (configured_drive_source(interactive=False, token_file=token_file(job["created_by"]))
+                      if is_drive else configured_sharepoint_source(SETTINGS))
             if job["phase"] == "analyze":
                 self._analyze(job, source)
             else:
@@ -102,6 +110,9 @@ class IndexingWorker:
             entries,
             source_kind.title(),
             on_result=on_result,
+            scope=RecruiterScope(
+                AgentSettings().workspace_id, job["created_by"], frozenset()
+            ),
         )
         self.store.finish(job["id"], job["attempts"], report.discovered, report.skipped)
 
@@ -110,13 +121,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Process queued SharePoint indexing jobs")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval", type=float, default=5.0)
+    parser.add_argument("--actor-id", type=UUID,
+                        help="process only jobs submitted by this signed-in recruiter")
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("interval must be positive")
     store = IndexingStore(SETTINGS.database_url)
     pipeline = RankingPipeline(SETTINGS)
     try:
-        worker = IndexingWorker(store, pipeline)
+        worker = IndexingWorker(store, pipeline,
+                                str(args.actor_id) if args.actor_id else None)
         if args.once:
             worker.run_once()
         else:

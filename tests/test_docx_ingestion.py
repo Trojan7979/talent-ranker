@@ -125,13 +125,14 @@ def test_drive_single_file_ingestion_preserves_resume_type(tmp_path, monkeypatch
     calls = []
     pipeline = SimpleNamespace(
         repo=SimpleNamespace(close=lambda: None),
-        ingest_resume=lambda candidate_id, path, uri, metadata: calls.append(
+        ingest_resume=lambda candidate_id, path, uri, metadata, scope: calls.append(
             (path.suffix, uri, metadata["client_source_uri"])
         ),
     )
     monkeypatch.setattr(cli, "drive_store", lambda: source)
     monkeypatch.setattr(cli, "canonical_store", lambda: FilesystemObjectStore(tmp_path))
     monkeypatch.setattr(cli, "RankingPipeline", lambda settings: pipeline)
+    monkeypatch.setattr(cli, "cli_scope", lambda _: SimpleNamespace(actor_id="recruiter"))
 
     cli.run_pipeline_command(SimpleNamespace(
         command="ingest-drive", candidate_id="CAND_0001", file_id="file-1", metadata=None,

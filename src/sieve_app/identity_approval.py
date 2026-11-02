@@ -69,6 +69,20 @@ class IdentityApprovalMixin:
                 elif action == "new":
                     if proposal["suggestion"] != "new" or proposal.get("analysis_error"):
                         raise ValueError("a matched file cannot create a new candidate")
+                    cur.execute(
+                        """SELECT 1 FROM sharepoint_candidate_files
+                           WHERE source_uri=%s LIMIT 1""",
+                        (proposal["source_uri"],),
+                    )
+                    if cur.fetchone() is not None:
+                        raise ValueError("review is stale; this resume was indexed after analysis. Analyze the folder again")
+                    cur.execute(
+                        """SELECT 1 FROM candidates WHERE source_sha256=%s
+                           AND deleted_at IS NULL LIMIT 1""",
+                        (proposal["sha256"],),
+                    )
+                    if cur.fetchone() is not None:
+                        raise ValueError("review is stale; this resume was indexed after analysis. Analyze the folder again")
                     next_number += 1
                     candidate_id = format_candidate_id(next_number)
                     cur.execute(

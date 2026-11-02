@@ -112,7 +112,11 @@ def list_campaigns(
 ) -> CampaignDirectory:
     if (before_created_at is None) != (before_id is None):
         raise HTTPException(status_code=422, detail="both cursor fields are required")
-    page = request.app.state.repo.list_campaigns(job_id, before_created_at, before_id, limit)
+    identity = request.app.state.recruiter_identity
+    allowed_jobs = sorted(identity.jobs(actor, request.app.state.ranking_workspace_id))
+    page = request.app.state.repo.list_campaigns(
+        job_id, before_created_at, before_id, limit, allowed_jobs,
+        request.app.state.ranking_workspace_id, actor)
     return CampaignDirectory.model_validate(page)
 
 

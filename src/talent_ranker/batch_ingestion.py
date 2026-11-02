@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from .access import RecruiterScope
 from .identifiers import validate_candidate_id
 from .storage import CanonicalObjectStore, ClientStorageAdapter, DriveFile, store_canonical_resume
 
@@ -20,6 +21,7 @@ class ResumePipeline(Protocol):
         path: Path,
         source_uri: str | None = None,
         metadata: dict | None = None,
+        scope: RecruiterScope | None = None,
     ) -> None: ...
 
 
@@ -119,10 +121,11 @@ def ingest_source_folder(
     source_name: str,
     progress: Callable[[str], None] | None = None,
     canonical_store: CanonicalObjectStore | None = None,
+    scope: RecruiterScope | None = None,
 ) -> BatchReport:
     return ingest_source_entries(
         pipeline, store, folder, read_manifest(manifest_path, id_column), source_name,
-        progress, canonical_store,
+        progress, canonical_store, scope=scope,
     )
 
 
@@ -135,6 +138,7 @@ def ingest_source_entries(
     progress: Callable[[str], None] | None = None,
     canonical_store: CanonicalObjectStore | None = None,
     on_result: Callable[[str, str | None], None] | None = None,
+    scope: RecruiterScope | None = None,
 ) -> BatchReport:
     files = store.list_resumes(folder)
     inventory = {item.file_id: item for item in files}
@@ -175,12 +179,12 @@ def ingest_source_entries(
                 source_uri = store.source_uri(item.file_id)
                 if canonical_store is not None:
                     source_uri = store_canonical_resume(canonical_store, entry.candidate_id, local)
-                pipeline.ingest_resume(
-                    entry.candidate_id,
-                    local,
-                    source_uri,
-                    metadata,
-                )
+                if scope is None:
+                    pipeline.ingest_resume(entry.candidate_id, local, source_uri, metadata)
+                else:
+                    pipeline.ingest_resume(
+                        entry.candidate_id, local, source_uri, metadata, scope=scope,
+                    )
                 report.indexed += 1
                 progress(f"[{position}/{len(entries)}] indexed {entry.candidate_id}")
             except Exception as error:  # noqa: BLE001 - isolate individual file failures
@@ -202,10 +206,11 @@ def ingest_drive_folder(
     manifest_path: Path,
     progress: Callable[[str], None] | None = None,
     canonical_store: CanonicalObjectStore | None = None,
+    scope: RecruiterScope | None = None,
 ) -> BatchReport:
     return ingest_source_folder(
         pipeline, store, folder_id, manifest_path, "drive_file_id", "Drive", progress,
-        canonical_store,
+        canonical_store, scope,
     )
 
 
@@ -216,8 +221,9 @@ def ingest_sharepoint_folder(
     manifest_path: Path,
     progress: Callable[[str], None] | None = None,
     canonical_store: CanonicalObjectStore | None = None,
+    scope: RecruiterScope | None = None,
 ) -> BatchReport:
     return ingest_source_folder(
         pipeline, store, folder_url, manifest_path, "sharepoint_file_id", "SharePoint",
-        progress, canonical_store,
+        progress, canonical_store, scope,
     )

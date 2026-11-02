@@ -43,7 +43,8 @@ class DriveWebOAuth:
         )
         return url
 
-    def complete(self, state: str, verifier: str, nonce: str, code: str) -> str:
+    def complete(self, state: str, verifier: str, nonce: str, code: str,
+                 token_file: Path) -> str:
         from google.auth.transport.requests import Request as GoogleRequest
         from google.oauth2 import id_token
 
@@ -72,7 +73,7 @@ class DriveWebOAuth:
             raise ValueError("Google account confirmation failed") from error
         if not claims.get("email_verified") or claims.get("nonce") != nonce:
             raise ValueError("Google account confirmation did not match this request")
-        self._save_token(Path(self.settings.google_token_file), credentials.to_json())
+        self._save_token(token_file, credentials.to_json())
         return str(claims["email"])
 
     @staticmethod

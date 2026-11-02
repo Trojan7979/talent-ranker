@@ -30,7 +30,7 @@ class DriveResumeSource:
         return self.store.get_resume(source_uri.removeprefix("gdrive://"))
 
 
-def configured_drive_source() -> DriveResumeSource:
+def configured_drive_source(interactive: bool = True, token_file: Path | None = None) -> DriveResumeSource:
     return DriveResumeSource(GoogleDriveStore(
-        Path(SETTINGS.google_credentials_file), Path(SETTINGS.google_token_file),
+        Path(SETTINGS.google_credentials_file), token_file or Path(SETTINGS.google_token_file), interactive,
     ))

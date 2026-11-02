@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .access import RecruiterScope
 from .calibration import build_calibrated_query
 from .candidate_retrieval import retrieve_pool
 from .config import Settings
 from .documents import chunk_resume, document_hash, extract_resume_document
-from .embeddings import CrossEncoderReranker, HuggingFaceEncoder
+from .embeddings import HostedEmbeddingEncoder, HostedReranker
 from .identifiers import validate_candidate_id
 from .metadata_evidence import assess_metadata
 from .privacy import redact_pii
@@ -22,9 +23,24 @@ from .schemas import HiringPriorities
 
 class RankingPipeline:
     def __init__(self, settings: Settings):
+        missing = [name for name, value in (
+            ("TALENT_RANKER_DATABASE_URL", settings.database_url),
+            ("TALENT_RANKER_HOSTED_EMBEDDING_MODEL", settings.hosted_embedding_model),
+            ("TALENT_RANKER_HOSTED_RERANKER_MODEL", settings.hosted_reranker_model),
+            ("TALENT_RANKER_HOSTED_EMBEDDING_URL", settings.hosted_embedding_url),
+            ("TALENT_RANKER_HOSTED_RERANKER_URL", settings.hosted_reranker_url),
+        ) if not value]
+        if missing:
+            raise ValueError("Configure " + ", ".join(missing) + " before starting the ranking pipeline")
         self.settings = settings
-        self.encoder = HuggingFaceEncoder(settings.embedding_model)
-        self.reranker = CrossEncoderReranker(settings.reranker_model)
+        self.encoder = HostedEmbeddingEncoder(
+            settings.hosted_embedding_url, settings.hosted_embedding_model,
+            settings.hosted_model_timeout_seconds,
+        )
+        self.reranker = HostedReranker(
+            settings.hosted_reranker_url, settings.hosted_reranker_model,
+            settings.hosted_model_timeout_seconds,
+        )
         self.repo = PostgresRepository(settings.database_url)
 
     def ingest_resume(
@@ -33,22 +49,35 @@ class RankingPipeline:
         path: Path,
         source_uri: str | None = None,
         metadata: dict | None = None,
+        scope: RecruiterScope | None = None,
     ) -> None:
         candidate_id = validate_candidate_id(candidate_id)
         data = path.read_bytes()
+        source_hash = document_hash(data)
+        source_key = (metadata or {}).get("client_source_uri") or source_uri or path.resolve().as_uri()
+        if scope is not None and self.repo.has_current_embedding(
+            candidate_id, source_hash, source_key, scope,
+        ):
+            return
+        if scope is not None:
+            self.repo.assert_resume_available(candidate_id, source_hash, source_key)
         extracted = extract_resume_document(path)
         index_text = redact_pii(extracted.text)
         chunks = chunk_resume(index_text, self.encoder.tokenize, self.encoder.decode)
+        if not chunks:
+            raise ValueError("resume has no extractable text; provide a text PDF, DOCX, or OCR")
         vectors = self.encoder.encode([chunk.embedding_text() for chunk in chunks])
+        access_kwargs = {"scope": scope} if scope is not None else {}
         self.repo.upsert_candidate(
             candidate_id,
             source_uri or path.resolve().as_uri(),
-            document_hash(data),
+            source_hash,
             index_text,
             chunks,
             vectors,
             metadata,
             links=extracted.links,
+            **access_kwargs,
         )
 
     def ingest_pdf(
@@ -59,8 +88,12 @@ class RankingPipeline:
         self.ingest_resume(candidate_id, path, source_uri, metadata)
 
     def rank(
-        self, job_id: str, job_profile: dict, top_k: int = 100
+        self, job_id: str, job_profile: dict, top_k: int = 100,
+        scope: RecruiterScope | None = None,
     ) -> tuple[str, list[RankedCandidate]]:
+        if scope is None:
+            raise ValueError("recruiter scope is required for ranking")
+        self.repo.assert_embedding_ready(scope)
         priority_model = HiringPriorities.model_validate(job_profile["priorities"])
         jd = build_calibrated_query(job_profile["job_description"], priority_model)
         ordered, fused, records, retrieval_trace = retrieve_pool(
@@ -70,9 +103,10 @@ class RankingPipeline:
             priority_model,
             self.settings.retrieval_limit,
             self.settings.rrf_k,
+            scope,
         )
         shortlist = ordered[: self.settings.rerank_limit]
-        all_chunks = self.repo.get_candidate_chunks(shortlist)
+        all_chunks = self.repo.get_candidate_chunks(shortlist, scope)
         documents = ["\n".join(records[cid]["chunks"])[:5000] for cid in shortlist]
         logits = self.reranker.score(jd, documents)
         jd_terms = set(jd.lower().split())
@@ -115,7 +149,10 @@ class RankingPipeline:
             job_id,
             job_profile["profile_version_id"],
             jd,
-            {"embedding": self.settings.embedding_model, "reranker": self.settings.reranker_model},
+            {
+                "embedding": self.settings.hosted_embedding_model,
+                "reranker": self.settings.hosted_reranker_model,
+            },
             {
                 "rrf_k": self.settings.rrf_k,
                 "retrieval_limit": self.settings.retrieval_limit,
@@ -131,5 +168,6 @@ class RankingPipeline:
                 },
             },
             results,
+            scope,
         )
         return run_id, results

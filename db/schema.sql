@@ -23,16 +23,28 @@ CREATE TABLE IF NOT EXISTS resume_chunks (
     chunk_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
     content_tsv tsvector GENERATED ALWAYS AS
       (to_tsvector('english', coalesce(section, '') || ' ' || content)) STORED,
-    embedding vector(384) NOT NULL,
+    embedding_v2 vector(1024) NOT NULL,
     UNIQUE(candidate_id, ordinal)
 );
 
 CREATE INDEX IF NOT EXISTS resume_chunks_tsv_idx
   ON resume_chunks USING gin(content_tsv);
-CREATE INDEX IF NOT EXISTS resume_chunks_embedding_hnsw_idx
-  ON resume_chunks USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 128);
+CREATE INDEX IF NOT EXISTS resume_chunks_embedding_v2_hnsw_idx
+  ON resume_chunks USING hnsw (embedding_v2 vector_cosine_ops)
+  WITH (m = 16, ef_construction = 128) WHERE embedding_v2 IS NOT NULL;
 CREATE INDEX IF NOT EXISTS resume_chunks_candidate_idx ON resume_chunks(candidate_id);
+
+CREATE TABLE IF NOT EXISTS candidate_source_grants (
+    candidate_id text NOT NULL REFERENCES candidates(candidate_id) ON DELETE CASCADE,
+    workspace_id text NOT NULL,
+    actor_id text NOT NULL,
+    source_uri text NOT NULL,
+    grant_kind text NOT NULL CHECK (grant_kind IN ('owner', 'shared')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (candidate_id, workspace_id, actor_id)
+);
+CREATE INDEX IF NOT EXISTS candidate_source_grants_actor_idx
+  ON candidate_source_grants(workspace_id, actor_id, candidate_id);
 
 CREATE TABLE IF NOT EXISTS drive_oauth_states (
     state_hash text PRIMARY KEY,
@@ -121,6 +133,8 @@ CREATE TABLE IF NOT EXISTS ranking_runs (
     jd_text text NOT NULL,
     model_versions jsonb NOT NULL,
     scoring_config jsonb NOT NULL,
+    workspace_id text,
+    actor_id text,
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -130,6 +144,8 @@ CREATE INDEX IF NOT EXISTS ranking_runs_recent_idx
   ON ranking_runs(created_at DESC, run_id DESC);
 CREATE INDEX IF NOT EXISTS ranking_runs_job_recent_idx
   ON ranking_runs(job_id, created_at DESC, run_id DESC);
+CREATE INDEX IF NOT EXISTS ranking_runs_actor_recent_idx
+  ON ranking_runs(workspace_id, actor_id, created_at DESC, run_id DESC);
 
 CREATE TABLE IF NOT EXISTS ranking_results (
     run_id uuid NOT NULL REFERENCES ranking_runs(run_id) ON DELETE CASCADE,
@@ -167,3 +183,35 @@ CREATE TABLE IF NOT EXISTS candidate_external_evidence (
 CREATE INDEX IF NOT EXISTS external_evidence_claim_idx
   ON candidate_external_evidence(next_attempt_at, created_at)
   WHERE status IN ('pending', 'running');
+
+CREATE TABLE IF NOT EXISTS recruiter_identities (
+  recruiter_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider text NOT NULL CHECK (provider IN ('google', 'microsoft')),
+  issuer text NOT NULL,
+  subject text NOT NULL,
+  email text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_login_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(provider, issuer, subject)
+);
+CREATE TABLE IF NOT EXISTS recruiter_login_states (
+  state_hash text PRIMARY KEY,
+  provider text NOT NULL,
+  verifier text NOT NULL,
+  nonce text NOT NULL,
+  expires_at timestamptz NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recruiter_sessions (
+  token_hash text PRIMARY KEY,
+  recruiter_id uuid NOT NULL REFERENCES recruiter_identities(recruiter_id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS recruiter_sessions_actor_idx ON recruiter_sessions(recruiter_id);
+CREATE TABLE IF NOT EXISTS recruiter_job_grants (
+  workspace_id text NOT NULL,
+  recruiter_id uuid NOT NULL REFERENCES recruiter_identities(recruiter_id) ON DELETE CASCADE,
+  job_id text NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(workspace_id, recruiter_id, job_id)
+);

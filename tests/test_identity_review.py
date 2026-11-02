@@ -101,6 +101,16 @@ def test_identity_review_reuses_matches_and_reserves_new_ids():
                                   "New", "new@example.com", "recruiter")
             store.record_result(job["id"], indexing["attempts"], None)
             store.finish(job["id"], indexing["attempts"], discovered=4, skipped=2)
+            queued_duplicate = store.claim_next()
+            assert queued_duplicate["id"] == second_approved["id"]
+            store.finish(queued_duplicate["id"], queued_duplicate["attempts"], discovered=1, skipped=0)
+            stale_job = store.submit_analysis(uuid4(), FOLDER, "recruiter")
+            stale_claim = store.claim_next()
+            store.save_analysis(stale_job["id"], stale_claim["attempts"], [drafts[2]])
+            with pytest.raises(ValueError, match="review is stale"):
+                store.approve(stale_job["id"], "recruiter", [
+                    {"object_id": "new", "action": "new", "name": "New"},
+                ])
             assert all("email" not in item and "name" not in item
                        for item in store.get(job["id"], "recruiter")["entries"])
             with conn.cursor() as cur:
