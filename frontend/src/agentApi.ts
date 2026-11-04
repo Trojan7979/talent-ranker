@@ -1,5 +1,5 @@
 export type AgentMessage = { id: number; role: "user" | "assistant"; content: string; created_at: string };
-export type AgentSessionSummary = { id: string; job_id: string; setup_stage: AgentSession["setup_stage"];
+export type AgentSessionSummary = { id: string; job_id: string | null; setup_stage: AgentSession["setup_stage"];
   ranking_run_id: string | null; created_at: string; updated_at: string };
 export type DriveWatchSchedule = "instant" | "daily" | "weekends";
 export type DriveWatchInbox = {
@@ -8,7 +8,7 @@ export type DriveWatchInbox = {
   alerts: { id: number; file_id: string; name: string; kind: "pdf" | "docx"; created_at: string; folder_url: string }[];
 };
 export type AgentSession = {
-  id: string; job_id: string; ranking_run_id: string | null; campaign_id: string | null;
+  id: string; job_id: string | null; ranking_run_id: string | null; campaign_id: string | null;
   setup_stage: "awaiting_jd" | "awaiting_jd_approval" | "awaiting_criteria_approval" | "ranking" | "ranked";
   ranking_status: "pending" | "running" | "completed" | "failed" | null;
   question_draft: { must_haves: { id: string; text: string }[]; require_interest: boolean;
@@ -38,6 +38,7 @@ async function request<T>(path: string, token: string, options: RequestInit = {}
     const body = await response.json().catch(() => null);
     throw new Error(typeof body?.detail === "string" ? body.detail : `HTTP ${response.status}`);
   }
+  if (response.status === 204) return undefined as T;
   return response.json();
 }
 
@@ -50,11 +51,14 @@ export const agentApi = {
   dismissDriveAlert: (alertId: number, token: string) => request<{ dismissed: boolean }>(
     `/drive-watch/alerts/${alertId}/dismiss`, token, { method: "POST" },
   ),
-  createSession: (jobId: string, token: string, rankingRunId?: string, useSavedRun = true) => request<AgentSession>("/sessions", token, {
+  createSession: (jobId: string | undefined, token: string, rankingRunId?: string, useSavedRun = true) => request<AgentSession>("/sessions", token, {
     method: "POST", body: JSON.stringify({ job_id: jobId, ranking_run_id: rankingRunId, use_saved_run: useSavedRun }),
   }),
   getSession: (sessionId: string, token: string) => request<AgentSession>(`/sessions/${sessionId}`, token),
   listSessions: (token: string) => request<AgentSessionSummary[]>("/sessions", token),
+  deleteSession: (sessionId: string, token: string) => request<void>(`/sessions/${sessionId}`, token, {
+    method: "DELETE",
+  }),
   send: (sessionId: string, content: string, token: string) => request<{
     session: AgentSession; answer: string; campaign: Campaign | null;
   }>(`/sessions/${sessionId}/messages`, token, { method: "POST", body: JSON.stringify({ content }) }),

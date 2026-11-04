@@ -1,0 +1,1 @@
+ALTER TABLE agent_sessions ALTER COLUMN job_id DROP NOT NULL;

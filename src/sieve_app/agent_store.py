@@ -3,20 +3,26 @@ from uuid import UUID
 from candidate_screening.questions import JobQuestions, validate_against_approved_profile
 from psycopg.types.json import Jsonb
 
-from .agent_session_directory import AgentSessionDirectoryMixin
+from .agent_job_binding import AgentJobBindingMixin
 from .agent_reranking_store import AgentRerankingStoreMixin
+from .agent_session_directory import AgentSessionDirectoryMixin
 from .model_usage import AgentModelUsageMixin
 
 
-class AgentStore(AgentSessionDirectoryMixin, AgentRerankingStoreMixin, AgentModelUsageMixin):
+class AgentStore(
+    AgentJobBindingMixin, AgentSessionDirectoryMixin,
+    AgentRerankingStoreMixin, AgentModelUsageMixin,
+):
     """Conversation persistence over the application's existing PostgreSQL pool."""
 
     def __init__(self, repository):
         self.repository = repository
 
-    def create_session(self, workspace_id: str, actor: str, job_id: str, run_id: UUID | None):
+    def create_session(
+        self, workspace_id: str, actor: str, job_id: str | None, run_id: UUID | None,
+    ):
         with self.repository.connection() as conn, conn.cursor() as cur:
-            if run_id is None:
+            if run_id is None and job_id is not None:
                 cur.execute(
                     "INSERT INTO jobs(job_id,job_description) VALUES (%s,'') ON CONFLICT DO NOTHING",
                     (job_id,),

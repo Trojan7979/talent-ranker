@@ -17,7 +17,9 @@ def ranking_actor(
     request: Request,
 ) -> RecruiterScope:
     identity = getattr(request.app.state, "recruiter_identity", None)
-    workspace_id = getattr(request.app.state, "ranking_workspace_id", None)
+    workspace_id = getattr(request.app.state, "ranking_workspace_id", None) or getattr(
+        getattr(request.app.state, "agent_settings", None), "workspace_id", None
+    )
     if identity is None or not workspace_id:
         raise HTTPException(503, "ranking access is not configured")
     actor = identity.actor(request)

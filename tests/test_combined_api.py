@@ -71,9 +71,15 @@ def test_combined_api_routes_requests_and_runs_both_lifespans():
         return app
 
     app = create_app(service("ranking"), service("screening"))
+    assert app.state.ranking_workspace_id == app.state.agent_settings.workspace_id
     with TestClient(app) as client:
         assert client.get("/api/ranking/health").json() == {"service": "ranking"}
         assert client.get("/api/health").json() == {"service": "screening"}
+        paths = client.get("/openapi.json").json()["paths"]
+        assert "/api/ranking/health" in paths
+        assert "/api/health" in paths
+        assert client.get("/api/ranking/docs").status_code == 404
+        assert client.get("/api/docs").status_code == 404
         assert events == ["start:ranking", "start:screening"]
     assert events == ["start:ranking", "start:screening", "stop:screening", "stop:ranking"]
 

@@ -11,8 +11,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from psycopg.errors import UniqueViolation
 
 from .agent_config import AgentConfigurationError
-from .agent_role_workflow import AgentRoleWorkflow
 from .agent_reranking import AgentRerankingWorkflow
+from .agent_role_workflow import AgentRoleWorkflow
 from .agent_runtime import RecruitmentAgentRuntime
 from .agent_schemas import (
     AgentReply,
@@ -63,7 +63,9 @@ def available_jobs(actor: Actor, request: Request) -> dict[str, list[str]]:
 @router.post("/sessions", response_model=AgentSession, status_code=201)
 def create_session(details: CreateAgentSession, actor: Actor, request: Request):
     settings, screening_repo, ranking_repo, store = services(request)
-    if details.job_id not in request.app.state.recruiter_identity.jobs(actor, settings.workspace_id):
+    if details.use_saved_run and details.job_id is None:
+        raise HTTPException(status_code=422, detail="choose a role to use a saved ranking run")
+    if details.job_id is not None and details.job_id not in request.app.state.recruiter_identity.jobs(actor, settings.workspace_id):
         raise HTTPException(status_code=403, detail="job is not available to this recruiter")
     run = None
     if details.use_saved_run:
@@ -100,9 +102,16 @@ def get_session(session_id: UUID, actor: Actor, request: Request):
     row = store.get_session(session_id, settings.workspace_id, actor)
     if row is None:
         raise HTTPException(status_code=404, detail="agent session not found")
-    if row["job_id"] not in request.app.state.recruiter_identity.jobs(actor, settings.workspace_id):
+    if row["job_id"] is not None and row["job_id"] not in request.app.state.recruiter_identity.jobs(actor, settings.workspace_id):
         raise HTTPException(status_code=403, detail="job is not available to this recruiter")
     return view(store, row, request.app.state.screening_settings)
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+def delete_session(session_id: UUID, actor: Actor, request: Request) -> None:
+    settings, _, _, store = services(request)
+    if not store.delete_session(session_id, settings.workspace_id, actor):
+        raise HTTPException(status_code=404, detail="agent session not found")
 
 
 @router.post("/sessions/{session_id}/messages", response_model=AgentReply)
@@ -111,7 +120,7 @@ def send_message(session_id: UUID, details: SendAgentMessage, actor: Actor, requ
     row = store.get_session(session_id, settings.workspace_id, actor)
     if row is None:
         raise HTTPException(status_code=404, detail="agent session not found")
-    if row["job_id"] not in request.app.state.recruiter_identity.jobs(actor, settings.workspace_id):
+    if row["job_id"] is not None and row["job_id"] not in request.app.state.recruiter_identity.jobs(actor, settings.workspace_id):
         raise HTTPException(status_code=403, detail="job is not available to this recruiter")
     store.add_message(session_id, "user", details.content.strip())
     history = [

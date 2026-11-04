@@ -19,6 +19,11 @@ class SetupStore:
         self.session["setup_stage"] = next_stage
         return self.session
 
+    def bind_new_job(self, session_id):
+        assert session_id == self.session["id"]
+        self.session["job_id"] = "role-generated"
+        return self.session
+
     def queue_ranking(self, session_id, profile_id, top_k):
         assert session_id == self.session["id"]
         assert profile_id == self.session["draft_profile_version_id"]
@@ -112,6 +117,19 @@ def test_unstructured_jd_without_skill_sections_still_produces_reviewable_criter
     assert session["setup_stage"] == "awaiting_criteria_approval"
     assert pipeline.repo.profile["status"] == "draft"
     assert pipeline.repo.profile["job_description"].startswith("Lead the regional")
+
+
+def test_first_jd_binds_recruiter_conversation_to_a_role():
+    session = {"id": uuid4(), "job_id": None, "setup_stage": "awaiting_jd"}
+    pipeline = SetupPipeline()
+    reply = AgentRoleWorkflow(SimpleNamespace(), pipeline, SetupStore(session)).handle(
+        session, "recruiter",
+        "Senior Python engineer building APIs with PostgreSQL and mentoring engineers.",
+    )
+
+    assert "Draft hiring criteria" in reply
+    assert session["job_id"] == "role-generated"
+    assert pipeline.repo.profile["job_id"] == "role-generated"
 
 
 def test_failed_ranking_can_be_retried_from_chat():

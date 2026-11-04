@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class CreateAgentSession(BaseModel):
-    job_id: str = Field(min_length=1, max_length=200)
+    job_id: str | None = Field(default=None, min_length=1, max_length=200)
     ranking_run_id: UUID | None = None
     use_saved_run: bool = True
 
@@ -20,7 +20,7 @@ class AgentMessage(BaseModel):
 
 class AgentSessionSummary(BaseModel):
     id: UUID
-    job_id: str
+    job_id: str | None
     setup_stage: Literal["awaiting_jd", "awaiting_jd_approval", "awaiting_criteria_approval", "ranking", "ranked"]
     ranking_run_id: UUID | None
     created_at: datetime
@@ -29,7 +29,7 @@ class AgentSessionSummary(BaseModel):
 
 class AgentSession(BaseModel):
     id: UUID
-    job_id: str
+    job_id: str | None
     ranking_run_id: UUID | None
     setup_stage: Literal["awaiting_jd", "awaiting_jd_approval", "awaiting_criteria_approval", "ranking", "ranked"]
     ranking_status: Literal["pending", "running", "completed", "failed"] | None = None

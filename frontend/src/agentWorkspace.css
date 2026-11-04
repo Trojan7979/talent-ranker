@@ -62,6 +62,9 @@
 .agent-message { display: flex; gap: 11px; max-width: 82%; }
 .agent-message > div { min-width: 0; }
 .agent-message strong { color: #263249; font-size: 12px; }
+.agent-message-copy { display: grid; place-items: center; width: 24px; height: 24px; margin-top: 5px; padding: 0; border: 0; border-radius: 6px; color: #62708a; background: transparent; }
+.agent-message-copy svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.agent-message-copy:hover { color: #2458d3; }
 .agent-message p { margin: 6px 0 0; color: #344159; line-height: 1.6; white-space: pre-wrap; }
 .agent-message.user { justify-self: end; padding: 12px 15px; border-radius: 14px 14px 3px 14px; background: #edf2ff; }
 .agent-thinking { opacity: .7; }

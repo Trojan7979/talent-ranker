@@ -5,11 +5,13 @@ import type { AgentSession, Campaign, DriveWatchInbox } from "./agentApi";
 import { batchApi } from "./batchApi";
 import { qualificationQuestion } from "./CandidateQuestion";
 import { agentActions } from "./agentActions";
-import { AgentOnboarding } from "./AgentOnboarding";
 import { AgentCandidateCards } from "./AgentCandidateCards";
+import { AgentChatStart } from "./AgentChatStart";
 import { AgentConversationMenu } from "./AgentConversationMenu";
 import { AgentHeader } from "./AgentHeader";
+import { AgentOnboarding } from "./AgentOnboarding";
 import { AgentPromptBar } from "./AgentPromptBar";
+import { AgentThreadMessage } from "./AgentThreadMessage";
 import { useRecruiterSession } from "./RecruiterLayout";
 
 export function RecruitmentAgentPage() {
@@ -23,6 +25,7 @@ export function RecruitmentAgentPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [driveInbox, setDriveInbox] = useState<DriveWatchInbox | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const selectedAction = agentActions.find((action) => action.id === params.get("action"));
 
   useEffect(() => {
@@ -30,6 +33,7 @@ export function RecruitmentAgentPage() {
     setCampaign(null);
     setDriveInbox(null);
     setEmails({});
+    setChatOpen(false);
   }, [recruiter.token]);
 
   useEffect(() => {
@@ -80,16 +84,24 @@ export function RecruitmentAgentPage() {
   }, [campaign]);
 
   async function sendText(submitted: string) {
-    if (!session || !submitted.trim() || busy) return;
+    if (!submitted.trim() || busy) return;
     submitted = submitted.trim();
     setBusy(true); setError(null);
+    let activeSession = session;
     try {
-      const response = await agentApi.send(session.id, submitted, recruiter.token);
+      if (!activeSession) {
+        activeSession = await agentApi.createSession(undefined, recruiter.token, undefined, false);
+        setSession(activeSession);
+        setParams({ session: activeSession.id });
+      }
+      const response = await agentApi.send(activeSession.id, submitted, recruiter.token);
       setSession(response.session); setCampaign(response.campaign);
       setMessage((current) => current.trim() === submitted ? "" : current);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Agent execution failed.");
-      const restored = await agentApi.getSession(session.id, recruiter.token).catch(() => null);
+      const restored = activeSession
+        ? await agentApi.getSession(activeSession.id, recruiter.token).catch(() => null)
+        : null;
       if (restored) {
         setSession(restored); setCampaign(restored.campaign);
         if (restored.messages.slice(-2).some((item) => item.role === "user" && item.content === submitted)) {
@@ -100,10 +112,11 @@ export function RecruitmentAgentPage() {
     finally { setBusy(false); }
   }
 
-  function send(event: FormEvent) {
-    event.preventDefault();
-    void sendText(message);
-  }
+  function send(event: FormEvent) { event.preventDefault(); void sendText(message); }
+
+  function conversationDeleted(sessionId: string) { if (session?.id === sessionId) {
+    setSession(null); setCampaign(null); setError(null); setChatOpen(true); setParams({});
+  } }
 
   async function approve() {
     if (!session || !campaign) return;
@@ -149,13 +162,15 @@ export function RecruitmentAgentPage() {
 
   if (!session) return <main className="agent-page"><section className="agent-shell">
     <AgentHeader />
-    <AgentOnboarding
-      initialMode={params.has("action") && params.get("action") !== "role" ? "existing" : "new"}
-      selectedActionLabel={selectedAction?.label}
-      onConnected={(created, token) => {
-        recruiter.setToken(token); setSession(created); setParams({ session: created.id });
-      }}
-    />
+    {chatOpen
+      ? <AgentChatStart busy={busy} error={error} message={message} setMessage={setMessage}
+          send={send} token={recruiter.token}
+          onOpen={(restored) => {
+            setSession(restored); setCampaign(restored.campaign); setMessage(""); setParams({ session: restored.id });
+          }}
+          onNew={() => { setMessage(""); setError(null); }}
+          onDeleted={conversationDeleted} onError={setError} />
+      : <AgentOnboarding selectedActionLabel={selectedAction?.label} onOpenChat={() => setChatOpen(true)} />}
   </section></main>;
 
   return <main className="agent-page"><section className="agent-shell">
@@ -164,7 +179,9 @@ export function RecruitmentAgentPage() {
       <section className="agent-chat">
         <AgentConversationMenu session={session} token={recruiter.token} onError={setError}
           onOpen={(restored) => { setSession(restored); setCampaign(restored.campaign); setMessage(""); setParams({ session: restored.id }); }}
-          onNew={() => { setSession(null); setCampaign(null); setError(null); setParams({}); }} />
+          onNew={() => {
+            setSession(null); setCampaign(null); setError(null); setChatOpen(false); setParams({});
+          }} onDeleted={conversationDeleted} />
         {error && <p className="agent-error" role="alert">{error}</p>}
         {notice && <p className="agent-notice" role="status">{notice}</p>}
         <div className="agent-thread">
@@ -172,15 +189,8 @@ export function RecruitmentAgentPage() {
             ? "Ranking stopped after repeated failures. Ask your administrator to check the worker, then use Retry ranking below."
             : "Ranking approved resumes in the background. This conversation updates when the shortlist is saved."}</p>}
           {session.messages.length === 0 && <article className="agent-message assistant"><span className="agent-avatar" aria-hidden="true">✦</span><div><strong>Recruitment Agent</strong><p>I’m connected to this job and its saved ranking run. What would you like me to do?</p></div></article>}
-          {session.messages.map((item) => <article key={item.id} className={`agent-message ${item.role}`}>
-            {item.role === "assistant" && <span className="agent-avatar" aria-hidden="true">✦</span>}
-            <div><strong>{item.role === "user" ? "Recruiter" : "Recruitment Agent"}</strong><p>{
-              item.role === "assistant" && item.content.startsWith("Ranking finished. I saved ")
-                ? `${item.content.split("\n")[0]}\nReview the candidate cards below for names, scores, and evidence.`
-                : item.content
-            }</p></div>
-          </article>)}
-          {session.setup_stage === "ranked" && session.ranking_run_id &&
+          {session.messages.map((item) => <AgentThreadMessage key={item.id} message={item} />)}
+          {session.setup_stage === "ranked" && session.ranking_run_id && session.job_id &&
             <AgentCandidateCards jobId={session.job_id} runId={session.ranking_run_id} token={recruiter.token} />}
           {!busy && session.messages.at(-1)?.role === "user" && <p className="agent-notice" role="status">The last request has no completed response yet. Checking for an update.</p>}
           {busy && <article className="agent-message assistant agent-thinking"><span className="agent-avatar">✦</span><div><strong>Recruitment Agent</strong><p>Working through the recruitment tools…</p></div></article>}

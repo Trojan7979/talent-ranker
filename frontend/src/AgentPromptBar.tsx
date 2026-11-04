@@ -25,7 +25,8 @@ export function AgentPromptBar({ session, busy, onSend, onDraft }: Props) {
   const choose = (prompt: string) => prompt === "I approve this JD" ? onSend(prompt) : onDraft(prompt);
   return <div className="agent-prompt-bar" aria-label="Suggested prompts">
     {prompts.slice(0, 2).map((item) =>
-      <button type="button" key={item.label} disabled={busy} onClick={() => choose(item.prompt)}>{item.label}</button>)}
+      <button type="button" key={item.label} disabled={busy}
+        onClick={() => choose(item.prompt)}>{item.label}</button>)}
     <details className="agent-prompt-menu" ref={menu}><summary>More prompts</summary>
       <div className="agent-prompt-list">{prompts.slice(2).map((item) =>
         <button type="button" key={item.label} disabled={busy} onClick={() => {

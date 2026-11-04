@@ -7,7 +7,7 @@ import type { ContactPreview } from "./batchApi";
 import { BatchPreparation } from "./BatchPreparation";
 import { ResumeSourceCard } from "./ResumeSourceCard";
 import { ExternalEvidenceCard } from "./ExternalEvidenceCard";
-import { criterionLabel, rankingExplanation } from "./rankingExplanation";
+import { rankingExplanation } from "./rankingExplanation";
 
 type Props = { jobId: string; runId: string; token: string };
 
@@ -133,13 +133,6 @@ export function AgentCandidateCards({ jobId, runId, token }: Props) {
             <li><strong>Experience:</strong> {explanation.experience}</li>
             <li><strong>Why ranked:</strong> {explanation.why}</li>
           </ul>
-          <details><summary>Review criterion evidence</summary>
-            {(candidate.requirement_evidence?.length ?? 0) > 0
-              ? <ul>{candidate.requirement_evidence?.map((item, index) =>
-                <li key={index}><strong>{criterionLabel(item)}</strong> — {item.status.replaceAll("_", " ")}
-                  {item.passage && <p>{item.passage}</p>}</li>)}</ul>
-              : <p>No structured criterion evidence was saved for this run.</p>}
-          </details>
           <div className="agent-candidate-links">
             <ResumeSourceCard candidateId={candidate.candidate_id} token={token} />
             <ExternalEvidenceCard candidateId={candidate.candidate_id} token={token} />

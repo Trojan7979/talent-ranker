@@ -87,6 +87,8 @@ class AgentRoleWorkflow:
                 or priorities.must_have_requirements or priorities.preferred_requirements):
             return ("I could not identify hiring criteria in this description. "
                     "Please add the role's requirements or responsibilities and try again.")
+        if session["job_id"] is None:
+            session = self.store.bind_new_job(session["id"])
         profile = self.pipeline.repo.create_job_profile(
             session["job_id"], jd, priorities.model_dump(mode="json"), metadata
         )
@@ -116,7 +118,7 @@ class AgentRoleWorkflow:
                 return "Paste the job description, or say 'Write a JD for ...' with role details. I will show you a draft before anything is approved."
             self.store.advance_setup(session["id"], stage, "awaiting_jd_approval", draft_job_description=jd)
             return (
-                f"Here is the JD draft I captured for {job}:\n\n{jd}\n\n"
+                f"Here is the JD draft I captured{f' for {job}' if job else ''}:\n\n{jd}\n\n"
                 "Is this the full job description you want to use? Reply 'I approve this JD' "
                 "to extract hiring criteria for your review. Ranking needs a separate approval. "
                 "If these are only notes, say 'Write a JD from these notes' instead."

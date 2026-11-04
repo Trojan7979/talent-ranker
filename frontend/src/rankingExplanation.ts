@@ -17,12 +17,7 @@ export function rankingExplanation(candidate: CandidateScore) {
     ? `${matchedSkills.slice(0, 4).join(", ")}${matchedSkills.length > 4 ? `, +${matchedSkills.length - 4} more` : ""} recorded in the resume.`
     : "No approved skill match recorded in the saved evidence.";
 
-  const years = criteria.find((item) => item.category === "minimum_years_experience");
-  const experience = years?.reported_value != null
-    ? `${years.reported_value} years reported; JD minimum ${criterionLabel(years)} years. Not independently verified.`
-    : years
-      ? `JD minimum ${criterionLabel(years)} years; candidate total not verified from saved evidence.`
-      : "Total years of experience not verified from saved evidence.";
+  const experience = "Experience years are not available yet; add them later from a verified source.";
 
   const assessed = criteria.filter((item) =>
     ["must_have_skills", "preferred_skills", "must_have_requirements", "preferred_requirements"].includes(item.category));

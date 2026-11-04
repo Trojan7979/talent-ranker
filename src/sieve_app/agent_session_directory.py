@@ -14,14 +14,23 @@ class AgentSessionDirectoryMixin:
             return cur.fetchone()
 
     def list_sessions(self, workspace_id: str, actor: str, job_ids: list[str], limit: int = 30):
-        if not job_ids:
-            return []
         with self.repository.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """SELECT id,job_id,setup_stage,ranking_run_id,created_at,updated_at
                    FROM agent_sessions
-                   WHERE workspace_id=%s AND actor_id=%s AND job_id=ANY(%s)
+                   WHERE workspace_id=%s AND actor_id=%s
+                     AND (job_id IS NULL OR job_id=ANY(%s))
                    ORDER BY updated_at DESC,id DESC LIMIT %s""",
                 (workspace_id, actor, job_ids, limit),
             )
             return cur.fetchall()
+
+    def delete_session(self, session_id: UUID, workspace_id: str, recruiter_id: str) -> bool:
+        """Delete only a conversation owned by the signed-in recruiter."""
+        with self.repository.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """DELETE FROM agent_sessions
+                   WHERE id=%s AND workspace_id=%s AND actor_id=%s RETURNING id""",
+                (session_id, workspace_id, recruiter_id),
+            )
+            return cur.fetchone() is not None

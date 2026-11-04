@@ -6,7 +6,8 @@ from urllib.parse import urlsplit
 
 from candidate_screening.api import create_app as create_screening_app
 from candidate_screening.config import Settings as ScreeningSettings
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from talent_ranker.api import app as ranking_app
 from talent_ranker.config import SETTINGS as ranking_settings
@@ -57,6 +58,25 @@ screening_app = create_screening_app(
 )
 
 
+def service_router(service: FastAPI) -> APIRouter:
+    """Expose a service's API routes without its private documentation routes."""
+    router = APIRouter()
+    private_paths = {
+        path
+        for path in (
+            service.openapi_url,
+            service.docs_url,
+            service.redoc_url,
+            service.swagger_ui_oauth2_redirect_url,
+        )
+        if path
+    }
+    router.routes.extend(
+        route for route in service.router.routes if getattr(route, "path", None) not in private_paths
+    )
+    return router
+
+
 def create_app(
     ranking: FastAPI = ranking_app, screening: FastAPI = screening_app,
     index_store: IndexingStore | None = None,
@@ -71,6 +91,12 @@ def create_app(
             await stack.enter_async_context(screening.router.lifespan_context(screening))
             app.state.ranking_service = ranking
             app.state.screening_service = screening
+            if hasattr(ranking.state, "pipeline"):
+                app.state.pipeline = ranking.state.pipeline
+            if hasattr(screening.state, "repo"):
+                app.state.repo = screening.state.repo
+            if hasattr(screening.state, "workflow"):
+                app.state.workflow = screening.state.workflow
             if index_store is not None:
                 app.state.index_store = index_store
             elif ranking is ranking_app:
@@ -85,7 +111,10 @@ def create_app(
 
     app = FastAPI(title="Recruitment Agent API", lifespan=lifespan)
     app.state.screening_settings = getattr(screening.state, "settings", None)
+    app.state.settings = app.state.screening_settings
+    app.state.gmail_web_oauth = getattr(screening.state, "gmail_web_oauth", None)
     app.state.agent_settings = AgentSettings()
+    app.state.ranking_workspace_id = app.state.agent_settings.workspace_id
     identity_settings = IdentitySettings()
     if not identity_settings.database_url and app.state.screening_settings:
         identity_settings.database_url = getattr(app.state.screening_settings, "database_url", "")
@@ -103,8 +132,15 @@ def create_app(
     app.include_router(drive_watch_router)
     app.include_router(resume_router)
     app.include_router(evidence_router)
-    app.mount("/api/ranking", ranking)
-    app.mount("/api", screening)
+    app.include_router(service_router(ranking), prefix="/api/ranking")
+    app.include_router(service_router(screening), prefix="/api")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ranking_settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT"],
+        allow_headers=["Content-Type", "Authorization"],
+    )
     return app
 
 

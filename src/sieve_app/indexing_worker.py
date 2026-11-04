@@ -38,6 +38,10 @@ class IndexingWorker:
                else self.store.claim_next())
         if job is None:
             return False
+        logger.info(
+            "Processing resume %s job %s for recruiter %s",
+            job["phase"], job["id"], job.get("created_by", "unknown"),
+        )
         try:
             is_drive = job["folder_url"].startswith("https://drive.google.com/")
             source = (configured_drive_source(interactive=False, token_file=token_file(job["created_by"]))
@@ -126,6 +130,13 @@ def main() -> None:
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("interval must be positive")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logger.info(
+        "Indexing worker started (mode=%s, poll_interval=%.1fs, recruiter_scope=%s)",
+        "one job" if args.once else "continuous",
+        args.interval,
+        str(args.actor_id) if args.actor_id else "all valid recruiters",
+    )
     store = IndexingStore(SETTINGS.database_url)
     pipeline = RankingPipeline(SETTINGS)
     try:

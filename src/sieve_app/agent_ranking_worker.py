@@ -23,6 +23,11 @@ class AgentRankingWorker:
         job = self.store.claim_ranking()
         if job is None:
             return False
+        logger.info("Ranking top %s candidates.", job["top_k"])
+        logger.debug(
+            "Ranking job details: session_id=%s profile_version_id=%s",
+            job["session_id"], job["profile_version_id"],
+        )
         try:
             profile = self.pipeline.repo.get_job_profile(str(job["profile_version_id"]))
             if profile is None or profile["status"] != "approved":
@@ -38,8 +43,13 @@ class AgentRankingWorker:
                 profile["job_id"], profile, job["top_k"], scope
             )
             self.store.finish_ranking(job, run_id, results)
+            logger.info("Ranking completed: %s ranking results saved.", len(results))
+            logger.debug(
+                "Ranking result details: session_id=%s run_id=%s",
+                job["session_id"], run_id,
+            )
         except Exception:
-            logger.exception("Agent ranking job %s failed", job["session_id"])
+            logger.exception("Ranking job failed")
             self.store.fail_ranking(job)
         return True
 
@@ -51,6 +61,15 @@ def main() -> None:
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("interval must be positive")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logger.info(
+        "Ranking worker started; %s.",
+        "processing one queued job" if args.once else "waiting for ranking requests",
+    )
+    logger.debug(
+        "Ranking worker configuration: poll_interval=%.1fs reranker=%s",
+        args.interval, SETTINGS.hosted_reranker_model,
+    )
     repo = ScreeningRepository(SETTINGS.database_url)
     pipeline = RankingPipeline(SETTINGS)
     try:
