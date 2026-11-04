@@ -13,14 +13,14 @@ def test_experience_evidence_without_skills_heading():
         {"ordinal": 1, "section": "summary", "content": "Engineering leader."},
     ]
 
-    evidence, score, concerns = assess_requirements(priorities, chunks)
+    evidence, concerns = assess_requirements(priorities, chunks)
 
     assert evidence[0]["status"] == "experience_evidence"
+    assert evidence[0]["assessment_method"] == "literal"
     assert evidence[0]["section"] == "experience"
     assert evidence[0]["chunk_ordinal"] == 0
     assert evidence[1]["status"] == "not_evidenced"
     assert evidence[1]["passage"] is None
-    assert score == 0.5
     assert concerns
     assert "Python: experience evidence" in summarize_requirements(evidence, concerns)
     assert "SQL: not evidenced" in summarize_requirements(evidence, concerns)
@@ -29,9 +29,8 @@ def test_experience_evidence_without_skills_heading():
 def test_skills_list_receives_less_credit_than_experience():
     priorities = HiringPriorities(must_have_skills=["Python"])
     chunks = [{"ordinal": 0, "section": "skills", "content": "Python, SQL"}]
-    evidence, score, _ = assess_requirements(priorities, chunks)
+    evidence, _ = assess_requirements(priorities, chunks)
     assert evidence[0]["status"] == "listed"
-    assert score == 0.5
 
 
 def test_retrieval_unions_requirement_queries_before_shortlist():
@@ -69,18 +68,17 @@ def test_offline_evaluation_exposes_retrieval_miss():
 
 def test_metadata_unknown_does_not_become_mismatch():
     priorities = HiringPriorities(minimum_years_experience=5)
-    evidence, earned, possible = assess_metadata(priorities, {})
+    evidence = assess_metadata(priorities, {})
     assert evidence[0]["status"] == "not_evidenced"
-    assert (earned, possible) == (0, 0)
+    assert evidence[0]["assessment_method"] == "structured_metadata"
 
 
 def test_compensation_requires_matching_units():
     priorities = HiringPriorities(
         compensation={"maximum": 100000, "currency": "USD", "period": "year"}
     )
-    evidence, earned, possible = assess_metadata(
+    evidence = assess_metadata(
         priorities,
         {"expected_compensation": 90000, "compensation_currency": "INR"},
     )
     assert evidence[0]["status"] == "not_evidenced"
-    assert (earned, possible) == (0, 0)

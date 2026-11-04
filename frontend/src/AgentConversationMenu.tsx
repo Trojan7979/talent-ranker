@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { agentApi } from "./agentApi";
 import type { AgentSession, AgentSessionSummary } from "./agentApi";
 
@@ -12,9 +12,26 @@ type Props = {
 };
 
 export function AgentConversationMenu({ session, token, onOpen, onNew, onDeleted, onError }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<AgentSessionSummary[]>([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   async function toggle() {
     if (open) { setOpen(false); return; }
@@ -44,7 +61,12 @@ export function AgentConversationMenu({ session, token, onOpen, onNew, onDeleted
     } finally { setBusy(false); }
   }
 
-  return <div className="agent-context">
+  function startNew() {
+    setOpen(false);
+    onNew();
+  }
+
+  return <div className="agent-context" ref={containerRef}>
     <span>{session?.job_id ?? "New conversation"}</span>
     <small>{session?.ranking_run_id ? `Run ${session.ranking_run_id}` : "Signed-in recruiter workspace"}</small>
     <button type="button" aria-expanded={open} aria-controls="agent-conversation-menu" onClick={() => void toggle()}>Your conversations</button>
@@ -60,7 +82,7 @@ export function AgentConversationMenu({ session, token, onOpen, onNew, onDeleted
           aria-label={`Delete conversation ${item.job_id ?? item.id}`}
           onClick={() => void remove(item)}>Delete</button>
       </li>)}</ul>
-      <button type="button" className="agent-new-conversation" onClick={onNew}>Start a new conversation</button>
+      <button type="button" className="agent-new-conversation" onClick={startNew}>Start a new conversation</button>
     </div>}
   </div>;
 }

@@ -55,11 +55,11 @@ def _extract_requirements(text: str) -> tuple[list[str], list[str]]:
                        r"looking for|responsible for)\b", lowered):
             must_have.append(sentence)
     if not must_have and not preferred:
-        # Preserve evidence from unstructured descriptions, including jobs
-        # outside the software domain. The recruiter reviews these before use.
+        # Preserve an unstructured draft for review without silently promoting
+        # generic role prose into mandatory candidate qualifications.
         meaningful = [sentence for sentence in _sentences(text)
                       if len(sentence.split()) >= 4 and len(sentence) <= 500]
-        must_have = meaningful[:10]
+        preferred = meaningful[:10]
     return _unique(must_have), _unique(preferred)
 
 
@@ -134,9 +134,13 @@ def _extract_compensation(text: str) -> CompensationPriority:
 class RuleBasedPriorityExtractor:
     """Conservative, domain-neutral extraction for recruiter-reviewed drafts."""
 
+    def __init__(self, metadata: dict | None = None):
+        self.metadata = metadata
+        self.last_facts: list[dict] = []
+
     def extract(self, job_description: str) -> HiringPriorities:
         must_requirements, preferred_requirements = _extract_requirements(job_description)
-        return HiringPriorities(
+        priorities = HiringPriorities(
             must_have_skills=_labelled_values(
                 job_description, "required|must-have|mandatory|essential"
             ),
@@ -149,3 +153,24 @@ class RuleBasedPriorityExtractor:
             availability=_extract_availability(job_description),
             compensation=_extract_compensation(job_description),
         )
+        self.last_facts = _grounded_facts(job_description, priorities)
+        if self.metadata is not None:
+            self.metadata["criteria_evidence"] = self.last_facts
+        return priorities
+
+
+def _grounded_facts(text: str, priorities: HiringPriorities) -> list[dict]:
+    """Retain exact source passages for rule-derived textual criteria."""
+    passages = _sentences(text)
+    facts: list[dict] = []
+    for field, values in (
+        ("must_have_skills", priorities.must_have_skills),
+        ("preferred_skills", priorities.preferred_skills),
+        ("must_have_requirements", priorities.must_have_requirements),
+        ("preferred_requirements", priorities.preferred_requirements),
+    ):
+        for value in values:
+            normalized = value.casefold()
+            quote = next((item for item in passages if normalized in item.casefold()), value)
+            facts.append({"field": field, "value": value, "quote": quote})
+    return facts

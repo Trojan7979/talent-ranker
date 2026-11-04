@@ -59,6 +59,14 @@ class HiringPriorities(BaseModel):
                 if skill.strip() and skill.strip().casefold() not in must_have
             )
         )
+        self.must_have_requirements = list(dict.fromkeys(
+            value.strip() for value in self.must_have_requirements if value.strip()
+        ))
+        must_requirements = {value.casefold() for value in self.must_have_requirements}
+        self.preferred_requirements = list(dict.fromkeys(
+            value.strip() for value in self.preferred_requirements
+            if value.strip() and value.strip().casefold() not in must_requirements
+        ))
         return self
 
 

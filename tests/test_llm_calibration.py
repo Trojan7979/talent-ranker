@@ -26,7 +26,7 @@ def fact(field, value, quote):
 def test_freeform_jd_uses_one_model_call_with_grounded_facts():
     requests = []
     facts = [
-        fact("must_have_skills", "Python", "builds forecasting models in Python"),
+        fact("must_have_skills", "Python", "We need a senior data scientist who builds forecasting models in Python"),
         fact("preferred_skills", "SQL", "SQL is nice to have"),
         fact("minimum_years_experience", 5, "Five years of experience is required"),
         fact("seniority", "senior", "senior data scientist"),
@@ -58,7 +58,7 @@ def test_deepseek_criteria_extraction_disables_extended_reasoning():
         "https://example.test/v1/chat/completions", "secret",
         "deepseek-ai/DeepSeek-V4-Pro",
         post=lambda request, timeout: (requests.append(request) or response([
-            fact("must_have_skills", "Python", "builds forecasting models in Python")
+            fact("must_have_skills", "Python", "We need a senior data scientist who builds forecasting models in Python")
         ])),
     )
 
@@ -69,7 +69,7 @@ def test_deepseek_criteria_extraction_disables_extended_reasoning():
 
 def test_fenced_json_is_parsed_but_facts_still_require_jd_quotes():
     wrapped = "```json\n" + json.dumps({"facts": [
-        fact("must_have_skills", "Python", "builds forecasting models in Python")
+        fact("must_have_skills", "Python", "We need a senior data scientist who builds forecasting models in Python")
     ]}) + "\n```"
     extractor = LLMPriorityExtractor(
         "https://example.test", "secret", "model",
@@ -205,3 +205,27 @@ def test_missing_finish_reason_fails_closed():
     )
     with pytest.raises(CalibrationError, match="invalid or ungrounded"):
         extractor.extract(JD)
+
+
+def test_grounded_facts_are_added_to_calibration_metadata():
+    settings = Settings(
+        _env_file=None, calibration_extractor="llm",
+        calibration_api_key=SecretStr("secret"),
+        calibration_api_url="https://example.test/v1/chat/completions",
+        calibration_model="model",
+    )
+    extractor, metadata = configured_extractor(settings)
+    extractor.post = lambda request, timeout: response([
+        fact(
+            "must_have_skills", "Python",
+            "We need a senior data scientist who builds forecasting models in Python",
+        )
+    ])
+
+    extractor.extract(JD)
+
+    assert metadata["criteria_evidence"] == [{
+        "field": "must_have_skills",
+        "value": "Python",
+        "quote": "We need a senior data scientist who builds forecasting models in Python",
+    }]

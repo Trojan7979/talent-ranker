@@ -113,7 +113,7 @@ class HostedReranker:
         self.session = _session()
 
     def score(self, jd: str, documents: Sequence[str]) -> np.ndarray:
-        """Return logits so the existing final_score sigmoid runs exactly once."""
+        """Return logits so the scoring policy restores relevance with one sigmoid."""
         scores = []
         for start in range(0, len(documents), 32):
             batch = list(documents[start : start + 32])

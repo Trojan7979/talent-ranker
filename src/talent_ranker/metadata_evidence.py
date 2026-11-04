@@ -3,7 +3,7 @@ from __future__ import annotations
 from .schemas import HiringPriorities
 
 
-def assess_metadata(priorities: HiringPriorities, metadata: dict) -> tuple[list[dict], int, int]:
+def assess_metadata(priorities: HiringPriorities, metadata: dict) -> list[dict]:
     """Assess only supplied, job-related metadata; missing values stay unknown."""
     checks: list[tuple[str, str, object, object]] = [
         (
@@ -30,7 +30,6 @@ def assess_metadata(priorities: HiringPriorities, metadata: dict) -> tuple[list[
     if locations:
         checks.append(("location", "locations", locations, metadata.get("location")))
     assessments: list[dict] = []
-    earned = possible = 0
     for category, requirement, target, value in checks:
         if target is None:
             continue
@@ -64,16 +63,14 @@ def assess_metadata(priorities: HiringPriorities, metadata: dict) -> tuple[list[
             if supported
             else "reported_mismatch"
         )
-        if supported is not None:
-            possible += 1
-            earned += int(supported)
         assessments.append(
             {
                 "category": category,
                 "requirement": {requirement: target},
+                "assessment_method": "structured_metadata",
                 "status": status,
                 "source": "candidate_metadata" if value is not None else None,
                 "reported_value": value,
             }
         )
-    return assessments, earned, possible
+    return assessments

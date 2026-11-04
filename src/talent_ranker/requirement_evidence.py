@@ -20,18 +20,17 @@ def _passage(content: str, terms: list[str], limit: int = 240) -> str:
 
 def assess_requirements(
     priorities: HiringPriorities, chunks: Sequence[dict]
-) -> tuple[list[dict], float, list[str]]:
+) -> tuple[list[dict], list[str]]:
     """Match literal requirements across every section; related text is not proof."""
     groups = (
-        ("must_have_skills", priorities.must_have_skills, 2),
-        ("preferred_skills", priorities.preferred_skills, 1),
-        ("must_have_requirements", priorities.must_have_requirements, 2),
-        ("preferred_requirements", priorities.preferred_requirements, 1),
+        ("must_have_skills", priorities.must_have_skills),
+        ("preferred_skills", priorities.preferred_skills),
+        ("must_have_requirements", priorities.must_have_requirements),
+        ("preferred_requirements", priorities.preferred_requirements),
     )
     assessments: list[dict] = []
-    earned = possible = 0.0
     missing_must = False
-    for category, values, weight in groups:
+    for category, values in groups:
         for value in values:
             terms = _terms(value)
             # A complete phrase is defensible evidence; token overlap alone is not.
@@ -57,14 +56,13 @@ def assess_requirements(
                 if best
                 else "not_evidenced"
             )
-            possible += weight
-            earned += weight * (0.5 if status == "listed" else float(best is not None))
             if category.startswith("must_have") and best is None:
                 missing_must = True
             assessments.append(
                 {
                     "category": category,
                     "requirement": value,
+                    "assessment_method": "literal",
                     "status": status,
                     "section": best["section"] if best else None,
                     "chunk_ordinal": best["ordinal"] if best else None,
@@ -72,10 +70,12 @@ def assess_requirements(
                     "passage": _passage(best["content"], terms) if best else None,
                 }
             )
-    concerns = ["one or more must-have requirements are not evidenced"] if missing_must else []
-    if not possible:
+    concerns = [
+        "one or more must-have requirements have no literal resume evidence"
+    ] if missing_must else []
+    if not assessments:
         concerns.append("approved profile has no explicit textual requirements")
-    return assessments, earned / possible if possible else 0.5, concerns
+    return assessments, concerns
 
 
 def summarize_requirements(assessments: Sequence[dict], concerns: Sequence[str]) -> str:

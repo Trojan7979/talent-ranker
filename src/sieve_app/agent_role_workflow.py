@@ -74,7 +74,7 @@ class AgentRoleWorkflow:
         except CalibrationError:
             # A model outage or malformed answer must not force the recruiter to
             # rewrite a valid JD. Keep the fallback grounded in its actual text.
-            priorities = RuleBasedPriorityExtractor().extract(jd)
+            priorities = RuleBasedPriorityExtractor(metadata).extract(jd)
             metadata["method"] = "rules_fallback"
         finally:
             llm = getattr(extractor, "llm", extractor)

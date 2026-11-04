@@ -11,18 +11,26 @@ from .embeddings import HostedEmbeddingEncoder, HostedReranker
 from .identifiers import validate_candidate_id
 from .metadata_evidence import assess_metadata
 from .privacy import redact_pii
-from .ranking import (
-    RankedCandidate,
-    evidence_snippet,
-    final_score,
-)
+from .ranking import RankedCandidate, evidence_snippet
 from .repository import PostgresRepository
 from .requirement_evidence import assess_requirements, summarize_requirements
+from .scoring_policy import CandidateScoringPolicy, SemanticRelevanceScoringPolicy
 from .schemas import HiringPriorities
 
 
+def _candidate_document(retrieved: list[str], chunks: list[dict], limit: int = 5000) -> str:
+    """Put retrieval-selected evidence first, then add remaining resume sections once."""
+    passages = dict.fromkeys([
+        *retrieved,
+        *(chunk["content"] for chunk in chunks),
+    ])
+    return "\n".join(passages)[:limit]
+
+
 class RankingPipeline:
-    def __init__(self, settings: Settings):
+    def __init__(
+        self, settings: Settings, scoring_policy: CandidateScoringPolicy | None = None,
+    ):
         missing = [name for name, value in (
             ("TALENT_RANKER_DATABASE_URL", settings.database_url),
             ("TALENT_RANKER_HOSTED_EMBEDDING_MODEL", settings.hosted_embedding_model),
@@ -42,6 +50,7 @@ class RankingPipeline:
             settings.hosted_model_timeout_seconds,
         )
         self.repo = PostgresRepository(settings.database_url)
+        self.scoring_policy = scoring_policy or SemanticRelevanceScoringPolicy()
 
     def ingest_resume(
         self,
@@ -96,7 +105,7 @@ class RankingPipeline:
         self.repo.assert_embedding_ready(scope)
         priority_model = HiringPriorities.model_validate(job_profile["priorities"])
         jd = build_calibrated_query(job_profile["job_description"], priority_model)
-        ordered, fused, records, retrieval_trace = retrieve_pool(
+        ordered, _, records, retrieval_trace = retrieve_pool(
             self.repo,
             self.encoder,
             jd,
@@ -107,28 +116,24 @@ class RankingPipeline:
         )
         shortlist = ordered[: self.settings.rerank_limit]
         all_chunks = self.repo.get_candidate_chunks(shortlist, scope)
-        documents = ["\n".join(records[cid]["chunks"])[:5000] for cid in shortlist]
+        documents = [
+            _candidate_document(records[cid]["chunks"], all_chunks.get(cid, []))
+            for cid in shortlist
+        ]
         logits = self.reranker.score(jd, documents)
         jd_terms = set(jd.lower().split())
         results = []
         for cid, doc, logit in zip(shortlist, documents, logits, strict=True):
-            requirement_evidence, priority_score, priority_concerns = assess_requirements(
+            requirement_evidence, priority_concerns = assess_requirements(
                 priority_model, all_chunks.get(cid, [])
             )
-            metadata_evidence, metadata_earned, metadata_possible = assess_metadata(
+            metadata_evidence = assess_metadata(
                 priority_model, records[cid]["metadata"]
             )
-            textual_count = len(requirement_evidence)
             requirement_evidence.extend(metadata_evidence)
-            if metadata_possible:
-                priority_score = (priority_score * textual_count + metadata_earned) / (
-                    textual_count + metadata_possible
-                )
-            score, components, concerns = final_score(
-                fused[cid],
-                float(logit),
-                records[cid]["metadata"],
-                priority_score,
+            decision = self.scoring_policy.score(float(logit))
+            score, components, concerns = (
+                decision.score, decision.components, list(decision.concerns)
             )
             concerns.extend(priority_concerns)
             supported = [item["passage"] for item in requirement_evidence if item.get("passage")]
@@ -160,12 +165,10 @@ class RankingPipeline:
                 "retrieval_trace": retrieval_trace,
                 "retrieval_pool_size": len(ordered),
                 "shortlist_ids": shortlist,
-                "scoring_version": "requirement-evidence-v1",
-                "score_weights": {
-                    "semantic": 0.55,
-                    "retrieval": 0.20,
-                    "calibrated_priority": 0.25,
-                },
+                "scoring_version": "bge-semantic-relevance-v2",
+                "ranking_signal": "cross_encoder_relevance",
+                "retrieval_affects_score": False,
+                "literal_evidence_affects_score": False,
             },
             results,
             scope,

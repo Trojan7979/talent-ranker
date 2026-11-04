@@ -56,6 +56,7 @@ class HybridPriorityExtractor:
         draft = self.rules.extract(job_description)
         if _rules_cover_jd(job_description, draft):
             self.metadata["method"] = "rules"
+            self.metadata["criteria_evidence"] = self.rules.last_facts
             return draft
         result = self.llm.extract(job_description)
         self.metadata["method"] = "llm"
@@ -82,19 +83,21 @@ def calibrate_job_description(
 
 def configured_extractor(settings: Settings) -> tuple[PriorityExtractor, dict]:
     if settings.calibration_extractor == "rules":
-        return RuleBasedPriorityExtractor(), {"method": "rules"}
+        metadata = {"method": "rules", "prompt_version": PROMPT_VERSION}
+        return RuleBasedPriorityExtractor(metadata), metadata
     key = settings.calibration_api_key
-    extractor = LLMPriorityExtractor(
-        settings.calibration_api_url,
-        key.get_secret_value() if key else "",
-        settings.calibration_model,
-        settings.calibration_timeout_seconds,
-    )
     metadata = {
         "method": "llm" if settings.calibration_extractor == "llm" else "hybrid",
         "model": settings.calibration_model,
         "prompt_version": PROMPT_VERSION,
     }
+    extractor = LLMPriorityExtractor(
+        settings.calibration_api_url,
+        key.get_secret_value() if key else "",
+        settings.calibration_model,
+        settings.calibration_timeout_seconds,
+        metadata=metadata,
+    )
     if settings.calibration_extractor == "hybrid":
         return HybridPriorityExtractor(extractor, metadata), metadata
     return extractor, metadata

@@ -23,8 +23,8 @@ export function rankingExplanation(candidate: CandidateScore) {
     ["must_have_skills", "preferred_skills", "must_have_requirements", "preferred_requirements"].includes(item.category));
   const supported = assessed.filter((item) => item.status !== "not_evidenced").length;
   const why = assessed.length
-    ? `Rank #${candidate.rank}: ${supported}/${assessed.length} stated criteria have resume evidence; final order also uses semantic and retrieval relevance.`
-    : `Rank #${candidate.rank}: ordered by semantic and retrieval relevance; no explicit criteria were recorded.`;
+    ? `Rank #${candidate.rank}: ${supported}/${assessed.length} stated criteria have resume evidence; final order uses BGE semantic relevance.`
+    : `Rank #${candidate.rank}: ordered by BGE semantic relevance; no explicit criteria were recorded.`;
 
   return { skills, experience, why };
 }

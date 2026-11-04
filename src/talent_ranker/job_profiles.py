@@ -77,7 +77,9 @@ class JobProfileRepositoryMixin:
     def update_job_profile(self, profile_version_id: str, priorities: dict) -> dict | None:
         with self.conn.transaction(), self.conn.cursor() as cur:
             cur.execute(
-                """UPDATE job_profile_versions SET priorities = %s::jsonb
+                """UPDATE job_profile_versions SET priorities = %s::jsonb,
+                     calibration_metadata=(calibration_metadata-'criteria_evidence')
+                       || '{"recruiter_edited":true}'::jsonb
                    WHERE profile_version_id = %s::uuid AND status = 'draft'
                    RETURNING profile_version_id""",
                 (json.dumps(priorities), profile_version_id),

@@ -1,5 +1,6 @@
 from talent_ranker.documents import chunk_resume, extract_evidence_units
-from talent_ranker.ranking import final_score, quality_multiplier, reciprocal_rank_fusion
+from talent_ranker.ranking import reciprocal_rank_fusion
+from talent_ranker.scoring_policy import SemanticRelevanceScoringPolicy
 
 
 def test_section_aware_chunking():
@@ -45,14 +46,8 @@ def test_rrf_rewards_agreement():
     assert scores["b"] > scores["c"]
 
 
-def test_impossible_skill_duration_is_penalized():
-    clean, _ = quality_multiplier({"years_experience": 5, "max_claimed_skill_months": 48})
-    suspect, concerns = quality_multiplier({"years_experience": 2, "max_claimed_skill_months": 90})
-    assert suspect < clean
-    assert concerns
-
-
-def test_final_score_is_bounded():
-    score, components, _ = final_score(0.03, 100, {})
-    assert 0 <= score <= 1
-    assert components["semantic"] <= 1
+def test_semantic_scoring_policy_uses_cross_encoder_relevance_directly():
+    decision = SemanticRelevanceScoringPolicy().score(0.0)
+    assert decision.score == 0.5
+    assert decision.components == {"semantic_relevance": 0.5}
+    assert decision.concerns == ()

@@ -180,7 +180,7 @@ export function RecruitmentAgentPage() {
         <AgentConversationMenu session={session} token={recruiter.token} onError={setError}
           onOpen={(restored) => { setSession(restored); setCampaign(restored.campaign); setMessage(""); setParams({ session: restored.id }); }}
           onNew={() => {
-            setSession(null); setCampaign(null); setError(null); setChatOpen(false); setParams({});
+            setSession(null); setCampaign(null); setError(null); setChatOpen(true); setParams({});
           }} onDeleted={conversationDeleted} />
         {error && <p className="agent-error" role="alert">{error}</p>}
         {notice && <p className="agent-notice" role="status">{notice}</p>}
