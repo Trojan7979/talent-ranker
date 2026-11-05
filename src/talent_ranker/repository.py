@@ -146,7 +146,7 @@ class PostgresRepository(
                        JOIN candidate_source_grants g ON g.candidate_id=c.candidate_id
                          AND g.workspace_id=%s AND g.actor_id=%s
                          AND g.source_uri=coalesce(nullif(c.metadata->>'client_source_uri',''),c.source_uri)
-                       WHERE c.deleted_at IS NULL AND rc.embedding_v2 IS NOT NULL
+                       WHERE c.deleted_at IS NULL AND rc.embedding_v2 IS NOT NULL AND coalesce(c.metadata->>'document_kind','resume')='resume'
                        ORDER BY rc.embedding_v2 <=> %s::vector, rc.candidate_id, rc.ordinal
                        LIMIT %s
                    ), best_per_candidate AS (
@@ -167,7 +167,7 @@ class PostgresRepository(
                      JOIN candidate_source_grants g ON g.candidate_id=c.candidate_id
                        AND g.workspace_id=%s AND g.actor_id=%s
                        AND g.source_uri=coalesce(nullif(c.metadata->>'client_source_uri',''),c.source_uri)
-                     WHERE c.deleted_at IS NULL AND rc.content_tsv @@ {query}
+                     WHERE c.deleted_at IS NULL AND rc.content_tsv @@ {query} AND coalesce(c.metadata->>'document_kind','resume')='resume'
                      ORDER BY score DESC, rc.candidate_id, rc.ordinal LIMIT %s""",
                 (jd, scope.workspace_id, scope.actor_id, jd, limit * 3),
             )

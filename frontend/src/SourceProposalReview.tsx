@@ -67,7 +67,7 @@ export function SourceProposalReview({ review, decisions, update, busy, canAppro
         </>}
       </div>;
     })}</div>
-    <button type="button" disabled={busy || !canApprove} onClick={approve}>Confirm and index {selected} resumes</button>
+    <button type="button" disabled={busy || !canApprove} onClick={approve}>Confirm and process {selected} resumes</button>
   </>;
 }
 

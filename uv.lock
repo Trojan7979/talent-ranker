@@ -2178,6 +2178,8 @@ dependencies = [
     { name = "google-api-python-client" },
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
+    { name = "langchain" },
+    { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -2197,10 +2199,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-agent = [
-    { name = "langchain" },
-    { name = "langchain-openai" },
-]
 dev = [
     { name = "httpx" },
     { name = "pytest" },
@@ -2216,8 +2214,8 @@ requires-dist = [
     { name = "google-auth", specifier = ">=2.36,<3" },
     { name = "google-auth-oauthlib", specifier = ">=1.2,<2" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27,<1" },
-    { name = "langchain", marker = "extra == 'agent'", specifier = ">=1,<2" },
-    { name = "langchain-openai", marker = "extra == 'agent'", specifier = ">=1,<2" },
+    { name = "langchain", specifier = ">=1,<2" },
+    { name = "langchain-openai", specifier = ">=1,<2" },
     { name = "langgraph", specifier = ">=1,<2" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3,<4" },
     { name = "numpy", specifier = ">=1.26,<3" },
@@ -2236,7 +2234,7 @@ requires-dist = [
     { name = "urllib3", specifier = ">=2.2.3,<3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1" },
 ]
-provides-extras = ["agent", "dev"]
+provides-extras = ["dev"]
 
 [[package]]
 name = "tenacity"

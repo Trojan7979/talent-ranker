@@ -15,6 +15,7 @@ const jdReview: Prompt[] = [
 ];
 const criteria: Prompt[] = [
   { label: "Review criteria", prompt: "Show criteria" },
+  { label: "Replace JD", prompt: "Replace JD: " },
   { label: "Change must-haves", prompt: "Change must-have skills to Python, SQL, FastAPI" },
   { label: "Change preferences", prompt: "Change preferred skills to AWS, Docker, Kubernetes" },
   { label: "Change requirements", prompt: "Change must-have requirements to Production API experience, Database design experience" },

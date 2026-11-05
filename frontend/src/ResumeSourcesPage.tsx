@@ -5,6 +5,8 @@ import { agentApi } from "./agentApi";
 import type { DriveWatchInbox, DriveWatchSchedule } from "./agentApi";
 import { sourceRequest } from "./sourceApi";
 import { SourceProposalReview } from "./SourceProposalReview";
+import { IndexingOutcomeSummary } from "./IndexingOutcomeSummary";
+import { IndexingCompletionActions } from "./IndexingCompletionActions";
 import type { Decision } from "./SourceProposalReview";
 import { validId, type File, type Job, type SourceProvider } from "./sourceTypes";
 import { selectFirstResumes } from "./sourceSelection";
@@ -234,10 +236,11 @@ export function ResumeSourcesPage() {
       <h2>{provider === "drive" ? "Google Drive" : "SharePoint"} job</h2>
       {!token.trim() && <p>Enter recruiter access above to load this job.</p>}
       {job && <>
-        <p role="status">{job.status.replaceAll("_", " ")}: {job.indexed} indexed.</p>
+        <p role="status">{job.status.replaceAll("_", " ")}.</p>
+        <IndexingOutcomeSummary job={job} />
+        <IndexingCompletionActions job={job} />
         <SourceProposalReview review={review} decisions={decisions} update={update}
           busy={busy} canApprove={canApprove} approve={approve} selectFirst={selectFirst} />
-        {job.status !== "awaiting_review" && <p>{job.discovered} resumes discovered; {job.skipped} skipped; {job.failures.length} failures.</p>}
         {job.failures.length > 0 && <ul>{job.failures.map((failure, index) =>
           <li key={`${index}-${failure}`}>{failure}</li>)}</ul>}
       </>}

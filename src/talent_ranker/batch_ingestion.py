@@ -6,12 +6,18 @@ import json
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
 from .access import RecruiterScope
 from .identifiers import validate_candidate_id
 from .storage import CanonicalObjectStore, ClientStorageAdapter, DriveFile, store_canonical_resume
+
+
+class IngestionOutcome(StrEnum):
+    EMBEDDED = "embedded"
+    UNCHANGED = "unchanged"
 
 
 class ResumePipeline(Protocol):
@@ -22,7 +28,7 @@ class ResumePipeline(Protocol):
         source_uri: str | None = None,
         metadata: dict | None = None,
         scope: RecruiterScope | None = None,
-    ) -> None: ...
+    ) -> IngestionOutcome: ...
 
 
 class FolderSource(ClientStorageAdapter, Protocol):
@@ -41,9 +47,15 @@ class ManifestEntry:
 class BatchReport:
     discovered: int
     requested: int
-    indexed: int = 0
+    embedded: int = 0
+    unchanged: int = 0
     skipped: int = 0
     failures: list[str] = field(default_factory=list)
+
+    @property
+    def indexed(self) -> int:
+        """Backward-compatible name for callers that have not adopted outcome terminology."""
+        return self.embedded
 
 
 def write_inventory(files: list[DriveFile], output: Path, id_column: str) -> None:
@@ -137,7 +149,7 @@ def ingest_source_entries(
     source_name: str,
     progress: Callable[[str], None] | None = None,
     canonical_store: CanonicalObjectStore | None = None,
-    on_result: Callable[[str, str | None], None] | None = None,
+    on_result: Callable[[str, IngestionOutcome | None, str | None], None] | None = None,
     scope: RecruiterScope | None = None,
 ) -> BatchReport:
     files = store.list_resumes(folder)
@@ -153,7 +165,7 @@ def ingest_source_entries(
                 report.failures.append(failure)
                 progress(f"[{position}/{len(entries)}] failed {entry.candidate_id}")
                 if on_result:
-                    on_result(entry.candidate_id, failure)
+                    on_result(entry.candidate_id, None, failure)
                 continue
             failure = None
             local = None
@@ -180,13 +192,21 @@ def ingest_source_entries(
                 if canonical_store is not None:
                     source_uri = store_canonical_resume(canonical_store, entry.candidate_id, local)
                 if scope is None:
-                    pipeline.ingest_resume(entry.candidate_id, local, source_uri, metadata)
+                    outcome = pipeline.ingest_resume(
+                        entry.candidate_id, local, source_uri, metadata,
+                    )
                 else:
-                    pipeline.ingest_resume(
+                    outcome = pipeline.ingest_resume(
                         entry.candidate_id, local, source_uri, metadata, scope=scope,
                     )
-                report.indexed += 1
-                progress(f"[{position}/{len(entries)}] indexed {entry.candidate_id}")
+                # Treat legacy/custom pipelines without an explicit result as a completed embed.
+                outcome = outcome or IngestionOutcome.EMBEDDED
+                if outcome == IngestionOutcome.UNCHANGED:
+                    report.unchanged += 1
+                    progress(f"[{position}/{len(entries)}] unchanged {entry.candidate_id}")
+                else:
+                    report.embedded += 1
+                    progress(f"[{position}/{len(entries)}] embedded {entry.candidate_id}")
             except Exception as error:  # noqa: BLE001 - isolate individual file failures
                 failure = f"{entry.candidate_id}: {error}"
                 report.failures.append(failure)
@@ -195,7 +215,7 @@ def ingest_source_entries(
                 if local is not None:
                     local.unlink(missing_ok=True)
             if on_result:
-                on_result(entry.candidate_id, failure)
+                on_result(entry.candidate_id, outcome if failure is None else None, failure)
     return report
 
 

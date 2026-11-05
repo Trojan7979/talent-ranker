@@ -3,6 +3,7 @@ import type { Proposal } from "./SourceProposalReview";
 export type File = { file_id: string; name: string; web_url: string };
 export type Job = {
   id: string; status: string; discovered: number; indexed: number;
+  analyzed: number; matched_existing: number; unchanged: number; embedded: number;
   skipped: number; failures: string[]; proposals: Proposal[];
 };
 export type SourceProvider = "sharepoint" | "drive" | "s3";

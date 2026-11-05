@@ -123,8 +123,9 @@ def test_drive_indexing_job_uses_selected_file_and_persists_drive_source(monkeyp
         def record_identity(self, *args, **kwargs):
             self.identity = (args, kwargs)
 
-        def record_result(self, job_id, attempt, failure):
+        def record_result(self, job_id, attempt, failure, outcome=None):
             self.result = failure
+            self.outcome = outcome
 
         def finish(self, job_id, attempt, discovered, skipped):
             assert (discovered, skipped) == (1, 0)
@@ -134,6 +135,7 @@ def test_drive_indexing_job_uses_selected_file_and_persists_drive_source(monkeyp
     jobs = Jobs()
     assert IndexingWorker(jobs, Pipeline()).run_once()
     assert jobs.result is None
+    assert jobs.outcome == "embedded"
     assert jobs.identity[1] == {"source_kind": "drive"}
 
 

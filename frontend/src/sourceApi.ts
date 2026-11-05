@@ -2,6 +2,7 @@ export type ResumeSource = {
   file_name: string;
   web_url: string;
   modified_at: string;
+  provider: "google_drive" | "sharepoint";
   source_status: "unchanged" | "changed" | "unknown";
 };
 

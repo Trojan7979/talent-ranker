@@ -40,6 +40,7 @@ class HiringPriorities(BaseModel):
     preferred_skills: list[str] = Field(default_factory=list)
     must_have_requirements: list[str] = Field(default_factory=list)
     preferred_requirements: list[str] = Field(default_factory=list)
+    role_responsibilities: list[str] = Field(default_factory=list)
     minimum_years_experience: float | None = Field(default=None, ge=0, le=80)
     seniority: str | None = None
     location: LocationPriority = Field(default_factory=LocationPriority)
@@ -67,6 +68,11 @@ class HiringPriorities(BaseModel):
             value.strip() for value in self.preferred_requirements
             if value.strip() and value.strip().casefold() not in must_requirements
         ))
+        explicit = must_requirements | {value.casefold() for value in self.preferred_requirements}
+        self.role_responsibilities = list(dict.fromkeys(
+            value.strip() for value in self.role_responsibilities
+            if value.strip() and value.strip().casefold() not in explicit
+        ))
         return self
 
 
@@ -75,6 +81,7 @@ class HiringPriorityOverrides(BaseModel):
     preferred_skills: list[str] | None = None
     must_have_requirements: list[str] | None = None
     preferred_requirements: list[str] | None = None
+    role_responsibilities: list[str] | None = None
     minimum_years_experience: float | None = Field(default=None, ge=0, le=80)
     seniority: str | None = None
     location: LocationPriority | None = None

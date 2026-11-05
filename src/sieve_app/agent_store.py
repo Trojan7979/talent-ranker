@@ -156,10 +156,18 @@ class AgentStore(
     def ranking_job(self, session_id: UUID):
         with self.repository.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT status,last_error FROM agent_ranking_jobs WHERE session_id=%s",
+                "SELECT status,last_error,progress_message,progress_events FROM agent_ranking_jobs WHERE session_id=%s",
                 (session_id,),
             )
             return cur.fetchone()
+
+    def update_ranking_progress(self, job: dict, message: str) -> None:
+        with self.repository.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """UPDATE agent_ranking_jobs SET progress_message=%s,progress_events=progress_events || jsonb_build_array(%s::text),updated_at=now()
+                   WHERE session_id=%s AND status='running' AND attempts=%s""",
+                (message, message, job["session_id"], job["attempts"]),
+            )
 
     def ranking_session(self, session_id: UUID):
         with self.repository.connection() as conn, conn.cursor() as cur:
@@ -173,7 +181,7 @@ class AgentStore(
         with self.repository.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """UPDATE agent_ranking_jobs SET status='pending',attempts=0,
-                     last_error=NULL,leased_until=NULL,updated_at=now()
+                     last_error=NULL,progress_message=NULL,progress_events='[]'::jsonb,leased_until=NULL,updated_at=now()
                    WHERE session_id=%s AND status='failed' RETURNING session_id""",
                 (session_id,),
             )
@@ -191,6 +199,7 @@ class AgentStore(
                 return None
             cur.execute(
                 """UPDATE agent_ranking_jobs SET status='running',attempts=attempts+1,
+                     progress_message='Preparing ranking',progress_events='["Preparing ranking"]'::jsonb,
                      leased_until=now()+interval '30 minutes',updated_at=now()
                    WHERE session_id=%s RETURNING *""",
                 (row["session_id"],),
@@ -202,7 +211,7 @@ class AgentStore(
         with self.repository.connection() as conn, conn.transaction(), conn.cursor() as cur:
             cur.execute(
                 """UPDATE agent_ranking_jobs SET status='completed',run_id=%s,
-                     leased_until=NULL,updated_at=now()
+                     progress_message=NULL,leased_until=NULL,updated_at=now()
                    WHERE session_id=%s AND status='running' AND attempts=%s
                    RETURNING session_id""",
                 (run_id, job["session_id"], job["attempts"]),
@@ -228,6 +237,7 @@ class AgentStore(
             retry = job["attempts"] < 3
             cur.execute(
                 """UPDATE agent_ranking_jobs SET status=%s,leased_until=NULL,
+                     progress_message=NULL,
                      last_error='Ranking could not complete; check worker logs',updated_at=now()
                    WHERE session_id=%s AND status='running' AND attempts=%s""",
                 ("pending" if retry else "failed", job["session_id"], job["attempts"]),

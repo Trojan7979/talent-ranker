@@ -72,7 +72,8 @@ def test_lookup_returns_current_browser_link_and_version_comparison(source_clien
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "no-store"
     assert response.json() == {
-        "file_name": "jane.pdf", "web_url": URL, "modified_at": "", "source_status": expected,
+        "file_name": "jane.pdf", "web_url": URL, "modified_at": "",
+        "provider": "sharepoint", "source_status": expected,
     }
     assert state.calls == ["sharepoint://DriveID/ItemID"]
 
@@ -107,16 +108,33 @@ def test_timeout_and_missing_browser_link_are_recoverable(source_client):
 
 def test_drive_original_is_resolved_for_indexed_resume(source_client, monkeypatch):
     client, state = source_client
-    state.row = {"source_uri": "gdrive://resume_123", "source_etag": None}
+    state.row = {"source_uri": "gdrive://resume_123", "source_etag": None,
+                 "source_md5_checksum": "stored-md5"}
     url = "https://drive.google.com/file/d/resume_123/view"
 
     class DriveSource:
         def get_file(self, source_uri):
             assert source_uri == "gdrive://resume_123"
-            return DriveFile("resume_123", "mine.pdf", web_url=url)
+            return DriveFile("resume_123", "mine.pdf", web_url=url,
+                             md5_checksum="stored-md5")
 
     monkeypatch.setattr(resume_api, "require_token", lambda actor: Path("recruiter-token.json"))
     monkeypatch.setattr(resume_api, "configured_drive_source", lambda **kwargs: DriveSource())
     result = fetch(client)
     assert result.status_code == 200
     assert result.json()["web_url"] == url
+    assert result.json()["provider"] == "google_drive"
+    assert result.json()["source_status"] == "unchanged"
+
+
+def test_drive_checksum_detects_changed_file(source_client, monkeypatch):
+    client, state = source_client
+    state.row = {"source_uri": "gdrive://resume_123", "source_etag": None,
+                 "source_md5_checksum": "old-md5"}
+    monkeypatch.setattr(resume_api, "require_token", lambda actor: Path("recruiter-token.json"))
+    monkeypatch.setattr(resume_api, "configured_drive_source", lambda **kwargs: SimpleNamespace(
+        get_file=lambda _: DriveFile("resume_123", "mine.pdf",
+                                     web_url="https://drive.google.com/file/d/resume_123/view",
+                                     md5_checksum="new-md5"),
+    ))
+    assert fetch(client).json()["source_status"] == "changed"

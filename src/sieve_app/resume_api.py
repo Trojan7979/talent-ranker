@@ -24,6 +24,7 @@ class ResumeSource(BaseModel):
     file_name: str
     web_url: str
     modified_at: str
+    provider: Literal["google_drive", "sharepoint"]
     source_status: Literal["unchanged", "changed", "unknown"]
 
 
@@ -40,9 +41,11 @@ def get_resume_source(candidate_id: str, actor: Actor, request: Request,
         raise HTTPException(status_code=404, detail="Candidate resume not found")
     source_uri = row["source_uri"]
     if source_uri.startswith("sharepoint://"):
+        provider = "sharepoint"
         _configured()
         source = configured_sharepoint_source(SETTINGS)
     elif source_uri.startswith("gdrive://"):
+        provider = "google_drive"
         try:
             source = configured_drive_source(interactive=False, token_file=require_token(actor))
         except DriveConnectionError as error:
@@ -68,6 +71,9 @@ def get_resume_source(candidate_id: str, actor: Actor, request: Request,
     status = "unknown"
     if row.get("source_etag") and file.etag:
         status = "unchanged" if row["source_etag"] == file.etag else "changed"
+    elif row.get("source_md5_checksum") and file.md5_checksum:
+        status = ("unchanged" if row["source_md5_checksum"] == file.md5_checksum
+                  else "changed")
     response.headers["Cache-Control"] = "no-store"
     return ResumeSource(file_name=file.name, web_url=file.web_url,
-                        modified_at=file.modified_time, source_status=status)
+                        modified_at=file.modified_time, provider=provider, source_status=status)

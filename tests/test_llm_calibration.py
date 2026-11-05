@@ -23,7 +23,7 @@ def fact(field, value, quote):
     return {"field": field, "value": value, "quote": quote}
 
 
-def test_freeform_jd_uses_one_model_call_with_grounded_facts():
+def test_freeform_jd_extracts_grounded_facts_in_one_call():
     requests = []
     facts = [
         fact("must_have_skills", "Python", "We need a senior data scientist who builds forecasting models in Python"),
@@ -49,6 +49,7 @@ def test_freeform_jd_uses_one_model_call_with_grounded_facts():
     assert priorities.seniority == "senior"
     payload = json.loads(requests[0].data)
     assert payload["model"] == "model"
+    assert payload["response_format"] == {"type": "json_object"}
     assert payload["messages"][1]["content"].endswith(JD)
 
 
@@ -105,6 +106,25 @@ def test_skill_must_appear_in_its_supporting_quote():
         extractor.extract(JD)
 
 
+def test_invalid_model_fact_gets_one_guided_retry_with_usage_accounted():
+    requests = []
+    def post(request, timeout):
+        requests.append(json.loads(request.data))
+        facts = ([fact("must_have_skills", "Rust", "builds forecasting models in Python")]
+                 if len(requests) == 1 else
+                 [fact("must_have_skills", "Python", "We need a senior data scientist who builds forecasting models in Python")])
+        result = response(facts)
+        result["usage"] = {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
+        return result
+
+    extractor = LLMPriorityExtractor("https://example.test", "secret", "model", post=post)
+    priorities = extractor.extract(JD)
+
+    assert priorities.must_have_skills == ["Python"]
+    assert len(requests) == 2
+    assert "failed validation" in requests[1]["messages"][-1]["content"]
+    assert extractor.last_usage["total_tokens"] == 240
+
 def test_incomplete_response_fails_closed():
     extractor = LLMPriorityExtractor(
         "https://example.test",
@@ -116,7 +136,6 @@ def test_incomplete_response_fails_closed():
     )
     with pytest.raises(CalibrationError, match="invalid or ungrounded"):
         extractor.extract(JD)
-
 
 def test_empty_model_draft_is_not_silently_accepted():
     extractor = LLMPriorityExtractor(

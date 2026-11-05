@@ -20,6 +20,7 @@ class AgentSettings(BaseSettings):
     max_tool_calls: int = Field(default=12, ge=1, le=40)
     execution_timeout_seconds: float = Field(default=90, gt=0, le=300)
     model_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    ranking_explanation_timeout_seconds: float = Field(default=60, gt=0, le=120)
     max_retries: int = Field(default=1, ge=0, le=3)
     max_recipients: int = Field(default=10, ge=1, le=100)
 

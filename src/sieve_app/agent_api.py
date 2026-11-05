@@ -11,7 +11,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from psycopg.errors import UniqueViolation
 
 from .agent_config import AgentConfigurationError
-from .agent_reranking import AgentRerankingWorkflow
 from .agent_role_workflow import AgentRoleWorkflow
 from .agent_runtime import RecruitmentAgentRuntime
 from .agent_schemas import (
@@ -131,8 +130,6 @@ def send_message(session_id: UUID, details: SendAgentMessage, actor: Actor, requ
             answer = AgentRoleWorkflow(
                 settings, request.app.state.ranking_service.state.pipeline, store
             ).handle(row, actor, details.content)
-        elif AgentRerankingWorkflow.is_request(details.content):
-            answer = AgentRerankingWorkflow(store).handle(row, details.content)
         elif AgentScreeningWorkflow.is_draft_request(details.content):
             answer = AgentScreeningWorkflow(
                 screening_repo, store, settings.max_recipients

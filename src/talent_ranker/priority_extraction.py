@@ -48,11 +48,11 @@ def _extract_requirements(text: str) -> tuple[list[str], list[str]]:
             continue
         if any(marker in lowered for marker in PREFERRED_MARKERS):
             preferred.append(sentence)
-        elif any(marker in lowered for marker in MUST_MARKERS):
-            must_have.append(sentence)
-        elif re.search(r"\b(?:experience (?:with|in)|proficient (?:with|in)|"
-                       r"skilled (?:with|in)|ability to|we (?:need|seek)|"
-                       r"looking for|responsible for)\b", lowered):
+        elif any(marker in lowered for marker in MUST_MARKERS) or re.search(
+            r"\b(?:experience (?:with|in)|proficient (?:with|in)|"
+            r"skilled (?:with|in)|ability to|we (?:need|seek)|"
+            r"looking for|responsible for)\b", lowered,
+        ):
             must_have.append(sentence)
     if not must_have and not preferred:
         # Preserve an unstructured draft for review without silently promoting
@@ -64,15 +64,22 @@ def _extract_requirements(text: str) -> tuple[list[str], list[str]]:
 
 
 def _extract_experience(text: str) -> float | None:
+    range_pattern = re.compile(
+        r"(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*years?",
+        flags=re.IGNORECASE,
+    )
+    range_minimums = [float(match.group(1)) for match in range_pattern.finditer(text)]
+    without_ranges = range_pattern.sub(" ", text)
     values = [
         float(value)
         for value in re.findall(
             r"(?:minimum(?:\s+of)?|at\s+least)?\s*(\d+(?:\.\d+)?)\+?\s*years?",
-            text,
+            without_ranges,
             flags=re.IGNORECASE,
         )
     ]
-    return max(values) if values else None
+    candidates = [*range_minimums, *values]
+    return max(candidates) if candidates else None
 
 
 def _extract_label(text: str, label: str) -> str | None:

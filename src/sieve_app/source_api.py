@@ -77,6 +77,10 @@ class IndexingJob(BaseModel):
     requested: int
     discovered: int
     indexed: int
+    analyzed: int = 0
+    matched_existing: int = 0
+    unchanged: int = 0
+    embedded: int = 0
     skipped: int
     failures: list[str]
     proposals: list[IdentityProposal] = Field(default_factory=list)
@@ -111,6 +115,8 @@ def _job(row: dict) -> IndexingJob:
     return IndexingJob(
         id=row["id"], status=row["status"], requested=len(row["entries"]),
         discovered=row["discovered"], indexed=row["indexed"], skipped=row["skipped"],
+        analyzed=row.get("analyzed", 0), matched_existing=row.get("matched_existing", 0),
+        unchanged=row.get("unchanged", 0), embedded=row.get("embedded", row["indexed"]),
         failures=row["failures"],
         proposals=[IdentityProposal.model_validate(item) for item in row["entries"]]
         if row["status"] == "awaiting_review" else [],

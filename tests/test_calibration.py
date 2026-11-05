@@ -1,9 +1,9 @@
 from talent_ranker.calibration import build_calibrated_query, calibrate_job_description
-from talent_ranker.priority_extraction import RuleBasedPriorityExtractor
 from talent_ranker.pipeline import RankingPipeline
+from talent_ranker.priority_extraction import RuleBasedPriorityExtractor
 from talent_ranker.priority_scoring import priority_alignment
-from talent_ranker.scoring_policy import SemanticRelevanceScoringPolicy
 from talent_ranker.schemas import HiringPriorities, HiringPriorityOverrides, LocationPriority
+from talent_ranker.scoring_policy import CriterionRelevanceScoringPolicy
 
 
 def test_calibration_extracts_must_have_and_preferred_skills():
@@ -70,18 +70,27 @@ def test_recruiter_overrides_replace_heuristic_values():
     assert priorities.location.remote_policy == "hybrid"
 
 
-def test_calibrated_query_emphasizes_must_have_skills():
+def test_calibrated_query_uses_short_criteria_without_repeating_jd():
     priorities = HiringPriorities(
         must_have_skills=["Python"],
         preferred_skills=["AWS"],
         minimum_years_experience=5,
     )
 
-    query = build_calibrated_query("Build ML systems.", priorities)
+    query = build_calibrated_query("5 years building ML systems.", priorities)
 
-    assert query.count("Mandatory skills: Python") == 3
-    assert "Preferred skills: AWS" in query
-    assert "Minimum experience: 5 years" in query
+    assert query.count("Python") == 1
+    assert "AWS" in query
+    assert "5 years" not in query
+    assert "building ML systems" not in query
+
+
+def test_rule_extraction_uses_lower_bound_of_experience_range():
+    priorities = calibrate_job_description(
+        "Candidates with 2-3 years experience are suitable."
+    )
+
+    assert priorities.minimum_years_experience == 2
 
 
 def test_priority_alignment_scores_explicit_criteria():
@@ -110,6 +119,14 @@ class FakeEncoder:
 class FakeReranker:
     def score(self, query, documents):
         return [0.0 for _ in documents]
+
+
+class FakeEvidenceAssessor:
+    def assess(self, matches):
+        return [{
+            "category": match["category"], "requirement": match["requirement"],
+            "status": "supported", "passage": "Built Python systems.",
+        } for match in matches]
 
 
 class FakeRankingRepository:
@@ -152,7 +169,8 @@ def test_pipeline_ranks_with_and_records_approved_profile_version():
     pipeline.encoder = FakeEncoder()
     pipeline.reranker = FakeReranker()
     pipeline.repo = FakeRankingRepository()
-    pipeline.scoring_policy = SemanticRelevanceScoringPolicy()
+    pipeline.scoring_policy = CriterionRelevanceScoringPolicy()
+    pipeline.evidence_assessor = FakeEvidenceAssessor()
     pipeline.settings = type(
         "Settings",
         (),
@@ -185,6 +203,9 @@ def test_pipeline_ranks_with_and_records_approved_profile_version():
     assert run_id == "run-1"
     assert pipeline.repo.query == "Python"
     assert pipeline.repo.saved_profile_version_id == "profile-1"
-    assert results[0].components == {"semantic_relevance": 0.5}
+    assert results[0].components == {
+        "must_have_relevance": 0.5, "preferred_relevance": 0.0,
+    }
     assert pipeline.repo.saved_scoring_config["retrieval_affects_score"] is False
     assert pipeline.repo.saved_scoring_config["literal_evidence_affects_score"] is False
+    assert pipeline.repo.saved_scoring_config["model_evidence_affects_score"] is False

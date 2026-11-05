@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .access import RecruiterScope
+from .calibration import remove_experience_durations
 from .ranking import reciprocal_rank_fusion
 from .schemas import HiringPriorities
 
@@ -10,16 +11,18 @@ def retrieve_pool(
     scope: RecruiterScope,
 ):
     """Union holistic and explicit requirement searches before the reranking cutoff."""
-    requirements = dict.fromkeys(
-        value.strip()
-        for values in (
-            priorities.must_have_skills,
-            priorities.must_have_requirements,
-        )
-        for value in values
-        if value.strip()
+    qualification_groups = (
+        priorities.must_have_skills, priorities.must_have_requirements,
+        priorities.preferred_skills, priorities.preferred_requirements,
     )
-    queries = [query, *requirements]
+    groups = qualification_groups if any(qualification_groups) else (priorities.role_responsibilities,)
+    requirements = dict.fromkeys(
+        remove_experience_durations(value)
+        for values in groups
+        for value in values
+        if remove_experience_durations(value)
+    )
+    queries = list(dict.fromkeys([query, *requirements]))
     vectors = encoder.encode(queries, query=True)
     scores: dict[str, float] = {}
     records: dict[str, dict] = {}
@@ -28,7 +31,7 @@ def retrieve_pool(
         dense, lexical, found = repo.retrieve(text, vector, limit, scope)
         traces.append({"query_index": index, "dense_ids": dense, "lexical_ids": lexical})
         for candidate_id, score in reciprocal_rank_fusion(dense, lexical, rrf_k).items():
-            scores[candidate_id] = max(scores.get(candidate_id, 0.0), score)
+            scores[candidate_id] = scores.get(candidate_id, 0.0) + score
         for candidate_id, record in found.items():
             if candidate_id not in records:
                 records[candidate_id] = record

@@ -3,15 +3,8 @@ import { sourceRequest } from "./sourceApi";
 
 type Evidence = {
   url: string;
-  kind: string;
   status: "pending" | "running" | "completed" | "failed" | "blocked" | "unsupported";
-  fetched_at: string | null;
-  evidence: { title?: string; text?: string };
-};
-
-const statusLabels: Record<Evidence["status"], string> = {
-  pending: "Waiting for public check", running: "Checking public page", completed: "Fetched",
-  failed: "Could not retrieve", blocked: "Access restricted", unsupported: "Link only",
+  evidence: { text?: string };
 };
 
 export function ExternalEvidenceCard({ candidateId, token }: { candidateId: string; token: string }) {
@@ -47,21 +40,18 @@ export function ExternalEvidenceCard({ candidateId, token }: { candidateId: stri
 
   return <div className="resume-source-card" aria-label={`Resume links for ${candidateId}`}>
     <button type="button" className="secondary-button" onClick={load} disabled={!token || loading}>
-      {loading ? "Loading links…" : items ? "Refresh links and statuses" : "View resume links"}
+      {loading ? "Loading links…" : items ? "Refresh links" : "View resume links"}
     </button>
     {error && <p className="error" role="alert">{error}</p>}
     {items && <>
-      <small>Links found in the resume. Opening a link does not verify ownership or change ranking scores.</small>
       {!items.length && <p>No links recorded. Previously indexed resumes need re-indexing to collect links.</p>}
-      {items.map((item) => <details key={item.url}>
-        <summary>{item.evidence.title || new URL(item.url).hostname} — {statusLabels[item.status]}</summary>
-        <a href={item.url} target="_blank" rel="noopener noreferrer">
-          {item.status === "unsupported" ? "Open profile or page" : "Open source"}
-        </a>
-        {item.status === "unsupported" && <small>Saved as a resume link; this app does not fetch or verify its content.</small>}
-        {item.fetched_at && <small> Retrieved {new Date(item.fetched_at).toLocaleString()}</small>}
-        {item.status === "completed" && <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{item.evidence.text}</p>}
-      </details>)}
+      {items.map((item) => <div key={item.url}>
+        <a href={item.url} target="_blank" rel="noopener noreferrer">{new URL(item.url).hostname}</a>
+        {item.status === "completed" && item.evidence.text && <details>
+          <summary>View fetched evidence</summary>
+          <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{item.evidence.text}</p>
+        </details>}
+      </div>)}
     </>}
   </div>;
 }

@@ -16,13 +16,14 @@ def test_explicit_top_n_request_queues_fresh_ranking_in_same_conversation():
     })())
     session = {"id": uuid4(), "ranking_run_id": uuid4(), "setup_stage": "ranked"}
 
-    assert workflow.is_request("Rank top 12 candidates using current indexed resumes")
-    assert not workflow.is_request("Show the top 12 candidates from this run")
-    reply = workflow.handle(session, "Rank top 12 candidates using current indexed resumes")
+    reply = workflow.queue(session, 12)
 
     assert queued == [(session, 12)]
     assert "criteria version 2" in reply
     assert "earlier saved run remains available" in reply
+
+    workflow.queue(session, 25)
+    assert queued[-1] == (session, 25)
 
 
 def test_reranking_does_not_reuse_old_screening_draft():
@@ -31,13 +32,13 @@ def test_reranking_does_not_reuse_old_screening_draft():
     })())
     session = {"question_draft": {"must_haves": []}}
 
-    assert "Start a new conversation" in workflow.handle(session, "Rank top 12 candidates")
+    assert "Start a new conversation" in workflow.queue(session, 12)
 
 
 def test_reranking_rejects_invalid_top_n():
     workflow = AgentRerankingWorkflow(None)
     with pytest.raises(ValueError, match="between 1 and 1000"):
-        workflow.handle({}, "Rank top 1001 candidates")
+        workflow.queue({}, 1001)
 
 
 def test_reranking_store_accepts_dictionary_database_rows():

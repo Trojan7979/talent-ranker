@@ -11,7 +11,7 @@ from threading import Event
 from uuid import UUID
 
 from talent_ranker.access import RecruiterScope
-from talent_ranker.batch_ingestion import ManifestEntry, ingest_source_entries
+from talent_ranker.batch_ingestion import IngestionOutcome, ManifestEntry, ingest_source_entries
 from talent_ranker.config import SETTINGS
 from talent_ranker.documents import extract_resume
 from talent_ranker.drive_source import configured_drive_source
@@ -24,6 +24,11 @@ from .indexing_store import IndexingStore
 from .resume_identity import extract_identity
 
 logger = logging.getLogger(__name__)
+
+
+def _progress_interval(total: int) -> int:
+    """Keep long jobs visible without printing one line per resume."""
+    return max(1, (total + 9) // 10)
 
 
 class IndexingWorker:
@@ -57,12 +62,14 @@ class IndexingWorker:
         return True
 
     def _analyze(self, job, source) -> None:
+        logger.info("Discovering resumes in the selected source folder.")
         files = source.list_resumes(job["folder_url"])
         if len(files) > 1000:
             raise ValueError("folder has more than 1000 resumes")
+        logger.info("Analyzing %s resumes for candidate identity review.", len(files))
         drafts = []
         with tempfile.TemporaryDirectory(prefix="sieve-resume-review-") as directory:
-            for file in files:
+            for position, file in enumerate(files, 1):
                 draft = {"object_id": file.file_id, "file_name": file.name,
                          "source_uri": source.source_uri(file.file_id),
                          "web_url": file.web_url,
@@ -80,8 +87,17 @@ class IndexingWorker:
                 finally:
                     local.unlink(missing_ok=True)
                 drafts.append(draft)
+                if position % _progress_interval(len(files)) == 0 or position == len(files):
+                    logger.info("Resume analysis progress: %s/%s checked.", position, len(files))
         drafts = self.store.match_candidates(drafts)
         self.store.save_analysis(job["id"], job["attempts"], drafts)
+        logger.info(
+            "Resume analysis ready for review: %s checked, %s matched existing, "
+            "%s new, %s need review.",
+            len(drafts), sum(item.get("suggestion") == "existing" for item in drafts),
+            sum(item.get("suggestion") == "new" for item in drafts),
+            sum(item.get("suggestion") == "review" for item in drafts),
+        )
 
     def _index(self, job, source, source_kind="sharepoint") -> None:
         entries_by_id = {item["candidate_id"]: item for item in job["entries"]}
@@ -89,8 +105,16 @@ class IndexingWorker:
                                  metadata={"job_title": item.get("job_title", "")},
                                  expected_sha256=item.get("sha256"))
                    for item in job["entries"]]
+        total = len(entries)
+        counts = {"embedded": 0, "unchanged": 0, "failed": 0}
+        processed = 0
+        logger.info("Indexing %s selected %s resumes.", total, source_kind.title())
+        logger.info("Checking the source folder before processing selected resumes.")
 
-        def on_result(candidate_id: str, failure: str | None) -> None:
+        def on_result(
+            candidate_id: str, outcome: IngestionOutcome | None, failure: str | None,
+        ) -> None:
+            nonlocal processed
             if failure is None:
                 item = entries_by_id[candidate_id]
                 identity_args = (
@@ -105,7 +129,18 @@ class IndexingWorker:
             self.store.record_result(
                 job["id"], job["attempts"],
                 f"{candidate_id}: indexing failed; check worker logs" if failure else None,
+                outcome=outcome,
             )
+            processed += 1
+            key = ("failed" if failure else "unchanged"
+                   if outcome == IngestionOutcome.UNCHANGED else "embedded")
+            counts[key] += 1
+            if processed % _progress_interval(total) == 0 or processed == total:
+                logger.info(
+                    "Resume indexing progress: %s/%s processed (%s newly embedded, "
+                    "%s unchanged, %s failed).",
+                    processed, total, counts["embedded"], counts["unchanged"], counts["failed"],
+                )
 
         report = ingest_source_entries(
             self.pipeline,
@@ -119,6 +154,11 @@ class IndexingWorker:
             ),
         )
         self.store.finish(job["id"], job["attempts"], report.discovered, report.skipped)
+        logger.info(
+            "Resume indexing completed: %s selected, %s newly embedded, %s unchanged, "
+            "%s failed; %s source files not selected.",
+            total, report.embedded, report.unchanged, len(report.failures), report.skipped,
+        )
 
 
 def main() -> None:

@@ -15,14 +15,20 @@ def test_approved_ranking_job_publishes_saved_run():
         },
         finish_ranking=lambda *args: calls.append(("finished", args)),
         fail_ranking=lambda *args: calls.append(("failed", args)),
+        update_ranking_progress=lambda *args: calls.append(("progress", args)),
     )
     profile = {"job_id": "role-1", "status": "approved"}
     pipeline = SimpleNamespace(
         repo=SimpleNamespace(get_job_profile=lambda value: profile),
-        rank=lambda job_id, approved, top_k, scope: (run_id, ["candidate"]),
+        rank=lambda job_id, approved, top_k, scope, progress: (
+            progress("Retrieving candidates") or run_id, ["candidate"]
+        ),
     )
     assert AgentRankingWorker(store, pipeline).run_once()
-    assert calls == [("finished", (job, run_id, ["candidate"]))]
+    assert calls == [
+        ("progress", (job, "Retrieving candidates")),
+        ("finished", (job, run_id, ["candidate"])),
+    ]
 
 
 def test_missing_approved_profile_fails_without_ranking():

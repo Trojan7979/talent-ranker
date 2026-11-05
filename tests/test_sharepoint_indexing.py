@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -83,12 +84,13 @@ def test_indexing_job_is_idempotent_and_expired_lease_resumes():
     if not database_url:
         pytest.skip("set SCREENING_TEST_DATABASE_URL for PostgreSQL integration tests")
     schema = "index_test_" + uuid4().hex
-    migration = Path(__file__).resolve().parents[1] / "db/migrations/006_sharepoint_ingestion_jobs.sql"
+    migrations = Path(__file__).resolve().parents[1] / "db/migrations"
     with psycopg.connect(database_url, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET search_path TO "{schema}"')
-            cur.execute(migration.read_text(encoding="utf-8"))
+            cur.execute((migrations / "006_sharepoint_ingestion_jobs.sql").read_text(encoding="utf-8"))
+            cur.execute((migrations / "022_indexing_outcome_counters.sql").read_text(encoding="utf-8"))
         store = IndexingStore(make_conninfo(database_url, options=f"-c search_path={schema}"))
         try:
             request_id = uuid4()
@@ -118,6 +120,7 @@ def test_indexing_job_is_idempotent_and_expired_lease_resumes():
             assert (finished["status"], finished["indexed"], finished["skipped"]) == (
                 "completed", 1, 1,
             )
+            assert (finished["embedded"], finished["unchanged"]) == (1, 0)
         finally:
             store.close()
             with conn.cursor() as cur:
@@ -125,7 +128,7 @@ def test_indexing_job_is_idempotent_and_expired_lease_resumes():
                 cur.execute(f'DROP SCHEMA "{schema}" CASCADE')
 
 
-def test_worker_reuses_existing_pipeline_and_records_progress(monkeypatch):
+def test_worker_reuses_existing_pipeline_and_records_progress(monkeypatch, caplog):
     from sieve_app import indexing_worker
 
     class Source:
@@ -166,9 +169,9 @@ def test_worker_reuses_existing_pipeline_and_records_progress(monkeypatch):
             assert source_uri == "sharepoint://drive-1/item-1"
             assert actor == "recruiter"
 
-        def record_result(self, job_id, attempt, failure):
+        def record_result(self, job_id, attempt, failure, outcome=None):
             assert attempt == 1
-            self.results.append((job_id, failure))
+            self.results.append((job_id, failure, outcome))
 
         def finish(self, job_id, attempt, discovered, skipped):
             assert attempt == 1
@@ -176,9 +179,13 @@ def test_worker_reuses_existing_pipeline_and_records_progress(monkeypatch):
 
     monkeypatch.setattr(indexing_worker, "configured_sharepoint_source", lambda settings: Source())
     jobs = Jobs()
-    assert IndexingWorker(jobs, Pipeline()).run_once()
+    with caplog.at_level(logging.INFO):
+        assert IndexingWorker(jobs, Pipeline()).run_once()
     assert jobs.results[0][1] is None
+    assert jobs.results[0][2] == "embedded"
     assert jobs.finished[1:] == (1, 0)
+    assert "Resume indexing progress: 1/1 processed (1 newly embedded, 0 unchanged, 0 failed)" in caplog.text
+    assert "Resume indexing completed: 1 selected, 1 newly embedded" in caplog.text
 
     class FailingPipeline(Pipeline):
         def ingest_resume(self, candidate_id, path, source_uri, metadata):
@@ -189,7 +196,7 @@ def test_worker_reuses_existing_pipeline_and_records_progress(monkeypatch):
     assert failed_jobs.results[0][1] == "CAND_0001: indexing failed; check worker logs"
 
 
-def test_worker_analyzes_before_any_embedding_or_indexing(monkeypatch):
+def test_worker_analyzes_before_any_embedding_or_indexing(monkeypatch, caplog):
     from sieve_app import indexing_worker
 
     class Source:
@@ -226,5 +233,7 @@ def test_worker_analyzes_before_any_embedding_or_indexing(monkeypatch):
     monkeypatch.setattr(indexing_worker, "extract_resume",
                         lambda path: "Jane Doe\njane@example.com\nRole: Software Engineer\nExperience\n")
     jobs = Jobs()
-    assert IndexingWorker(jobs, Pipeline()).run_once()
+    with caplog.at_level(logging.INFO):
+        assert IndexingWorker(jobs, Pipeline()).run_once()
     assert jobs.saved[0]["source_uri"] == "sharepoint://drive/item-1"
+    assert "Resume analysis ready for review: 1 checked, 0 matched existing, 1 new" in caplog.text

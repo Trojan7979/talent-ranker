@@ -34,9 +34,11 @@ def test_source_lookup_supports_legacy_copies_and_filters_deleted_candidates():
             try:
                 assert store.get_candidate_source("CAND_0001") == {
                     "source_uri": "sharepoint://Drive/Old", "source_etag": "v1",
+                    "source_md5_checksum": None,
                 }
                 assert store.get_candidate_source("CAND_0002") == {
                     "source_uri": "sharepoint://Drive/New", "source_etag": None,
+                    "source_md5_checksum": None,
                 }
                 assert store.get_candidate_source("CAND_0003") is None
                 assert store.get_candidate_source("CAND_0004")["source_uri"] == "file:///local/resume.pdf"

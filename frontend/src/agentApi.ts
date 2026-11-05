@@ -11,6 +11,8 @@ export type AgentSession = {
   id: string; job_id: string | null; ranking_run_id: string | null; campaign_id: string | null;
   setup_stage: "awaiting_jd" | "awaiting_jd_approval" | "awaiting_criteria_approval" | "ranking" | "ranked";
   ranking_status: "pending" | "running" | "completed" | "failed" | null;
+  ranking_progress: string | null;
+  ranking_events: string[];
   question_draft: { must_haves: { id: string; text: string }[]; require_interest: boolean;
     require_availability: boolean; require_notice_period: boolean; require_salary: boolean } | null;
   question_top_n: number | null; question_draft_revision: number; question_config_id: string | null;

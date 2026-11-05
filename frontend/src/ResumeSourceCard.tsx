@@ -43,8 +43,8 @@ export function ResumeSourceCard({ candidateId, token }: { candidateId: string; 
     {!token && <small>Recruiter access is required to view the source.</small>}
     {error && <p className="error" role="alert">{error}</p>}
     {source && <>
-      <a href={source.web_url} target="_blank" rel="noopener noreferrer">Open {source.file_name} in SharePoint</a>
-      <small>This opens the current document using your SharePoint access.</small>
+      <a href={source.web_url} target="_blank" rel="noopener noreferrer">Open {source.file_name} in {source.provider === "google_drive" ? "Google Drive" : "SharePoint"}</a>
+      <small>This opens the current document using your {source.provider === "google_drive" ? "Google Drive" : "SharePoint"} access.</small>
       {source.source_status === "changed" && <p role="status">
         The file or its details changed since indexing. Review and re-index to refresh the results.
       </p>}

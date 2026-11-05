@@ -30,6 +30,7 @@ def test_identity_review_reuses_matches_and_reserves_new_ids():
                 contactable boolean NOT NULL, updated_by text NOT NULL)""")
             cur.execute((migrations / "006_sharepoint_ingestion_jobs.sql").read_text())
             cur.execute((migrations / "007_sharepoint_identity_review.sql").read_text())
+            cur.execute((migrations / "022_indexing_outcome_counters.sql").read_text())
             cur.execute("INSERT INTO candidates VALUES ('CAND_0001','hash-one',NULL),"
                         "('CAND_0002','hash-two',NULL)")
             cur.execute("""INSERT INTO screening_contacts VALUES

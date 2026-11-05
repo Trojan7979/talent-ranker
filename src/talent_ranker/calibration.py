@@ -20,6 +20,16 @@ _STRUCTURED_CRITERION = re.compile(
     r"|(?:USD|INR|EUR|GBP|AUD|CAD|[$₹€£])\s*[\d,.]+\s*(?:-|to)\s*[\d,.]+)",
     re.IGNORECASE,
 )
+_EXPERIENCE_DURATION = re.compile(
+    r"\b(?:minimum(?:\s+of)?|at\s+least)?\s*\d+(?:\.\d+)?\+?\s*"
+    r"(?:(?:-|–|to)\s*\d+(?:\.\d+)?\+?\s*)?years?\b(?:\s+of\s+experience|\s+experience)?",
+    re.IGNORECASE,
+)
+
+
+def remove_experience_durations(text: str) -> str:
+    """Keep role context while making numeric tenure informational to ranking."""
+    return re.sub(r"\s+", " ", _EXPERIENCE_DURATION.sub(" ", text)).strip()
 
 
 def _rules_cover_jd(jd: str, priorities: HiringPriorities) -> bool:
@@ -104,36 +114,18 @@ def configured_extractor(settings: Settings) -> tuple[PriorityExtractor, dict]:
 
 
 def build_calibrated_query(job_description: str, priorities: HiringPriorities) -> str:
-    """Create a weighted textual query consumed by dense and lexical retrieval."""
-    parts = [job_description.strip()]
-    if priorities.must_have_requirements:
-        required = "\n".join(priorities.must_have_requirements)
-        parts.extend([f"Mandatory requirements:\n{required}"] * 2)
-    if priorities.must_have_skills:
-        must = ", ".join(priorities.must_have_skills)
-        parts.extend([f"Mandatory skills: {must}"] * 3)
-    if priorities.preferred_requirements:
-        preferred = "\n".join(priorities.preferred_requirements)
-        parts.append(f"Preferred requirements:\n{preferred}")
-    if priorities.preferred_skills:
-        parts.append(f"Preferred skills: {', '.join(priorities.preferred_skills)}")
-    if priorities.minimum_years_experience is not None:
-        parts.append(f"Minimum experience: {priorities.minimum_years_experience:g} years")
-    if priorities.seniority:
-        parts.append(f"Seniority: {priorities.seniority}")
-    if priorities.location.locations:
-        parts.append(f"Locations: {', '.join(priorities.location.locations)}")
-    if priorities.location.remote_policy:
-        parts.append(f"Work arrangement: {priorities.location.remote_policy}")
-    if priorities.availability.max_notice_period_days is not None:
-        parts.append(
-            f"Maximum notice period: {priorities.availability.max_notice_period_days} days"
-        )
-    compensation = priorities.compensation
-    if compensation.minimum is not None or compensation.maximum is not None:
-        value = (
-            f"{compensation.currency or ''} {compensation.minimum or ''}-"
-            f"{compensation.maximum or ''} {compensation.period or ''}"
-        )
-        parts.append(f"Compensation: {value.strip()}")
-    return "\n".join(parts)
+    """Use concise qualifications for broad retrieval; search each criterion separately."""
+    values = [
+        *priorities.must_have_requirements,
+        *priorities.must_have_skills,
+        *priorities.preferred_requirements,
+        *priorities.preferred_skills,
+    ]
+    if not values:
+        values = priorities.role_responsibilities
+    parts = []
+    for value in filter(None, map(remove_experience_durations, values)):
+        if len("; ".join([*parts, value])) > 400:
+            break
+        parts.append(value)
+    return "; ".join(parts) if parts else remove_experience_durations(job_description)[:400]

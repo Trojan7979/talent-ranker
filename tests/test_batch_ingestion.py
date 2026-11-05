@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from talent_ranker.batch_ingestion import (
+    IngestionOutcome,
     ManifestEntry,
     ingest_drive_folder,
     ingest_source_entries,
@@ -26,8 +27,9 @@ class FakeDriveStore:
 
 
 class FakePipeline:
-    def __init__(self):
+    def __init__(self, outcome: IngestionOutcome | None = None):
         self.calls: list[tuple] = []
+        self.outcome = outcome
 
     def ingest_resume(
         self,
@@ -35,8 +37,9 @@ class FakePipeline:
         path: Path,
         source_uri: str | None = None,
         metadata: dict | None = None,
-    ) -> None:
+    ) -> IngestionOutcome | None:
         self.calls.append((candidate_id, path.read_bytes(), source_uri, metadata))
+        return self.outcome
 
 
 def test_inventory_round_trip_and_batch_ingestion(tmp_path: Path):
@@ -107,3 +110,15 @@ def test_reviewed_file_change_is_rejected_before_indexing():
     assert report.indexed == 0
     assert "changed since recruiter review" in report.failures[0]
     assert not pipeline.calls
+
+
+def test_unchanged_resume_is_reported_without_claiming_a_new_embedding():
+    pipeline = FakePipeline(IngestionOutcome.UNCHANGED)
+    report = ingest_source_entries(
+        pipeline, FakeDriveStore([DriveFile("file-1", "resume.pdf")]),
+        "folder-1", [ManifestEntry("CAND_0001", "file-1")], "Drive",
+    )
+
+    assert report.unchanged == 1
+    assert report.embedded == 0
+    assert report.indexed == 0

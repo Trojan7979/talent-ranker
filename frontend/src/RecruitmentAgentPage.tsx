@@ -11,9 +11,9 @@ import { AgentConversationMenu } from "./AgentConversationMenu";
 import { AgentHeader } from "./AgentHeader";
 import { AgentOnboarding } from "./AgentOnboarding";
 import { AgentPromptBar } from "./AgentPromptBar";
+import { AgentRankingActivity } from "./AgentRankingActivity";
 import { AgentThreadMessage } from "./AgentThreadMessage";
 import { useRecruiterSession } from "./RecruiterLayout";
-
 export function RecruitmentAgentPage() {
   const recruiter = useRecruiterSession();
   const [params, setParams] = useSearchParams();
@@ -25,7 +25,8 @@ export function RecruitmentAgentPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [driveInbox, setDriveInbox] = useState<DriveWatchInbox | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
+  const openChatRequested = params.get("start") === "chat";
+  const [chatOpen, setChatOpen] = useState(openChatRequested);
   const selectedAction = agentActions.find((action) => action.id === params.get("action"));
 
   useEffect(() => {
@@ -33,8 +34,8 @@ export function RecruitmentAgentPage() {
     setCampaign(null);
     setDriveInbox(null);
     setEmails({});
-    setChatOpen(false);
-  }, [recruiter.token]);
+    setChatOpen(openChatRequested);
+  }, [recruiter.token, openChatRequested]);
 
   useEffect(() => {
     if (selectedAction) setMessage(selectedAction.prompt);
@@ -85,8 +86,8 @@ export function RecruitmentAgentPage() {
 
   async function sendText(submitted: string) {
     if (!submitted.trim() || busy) return;
-    submitted = submitted.trim();
-    setBusy(true); setError(null);
+    const draft = submitted.trim();
+    setMessage(""); setBusy(true); setError(null);
     let activeSession = session;
     try {
       if (!activeSession) {
@@ -94,9 +95,8 @@ export function RecruitmentAgentPage() {
         setSession(activeSession);
         setParams({ session: activeSession.id });
       }
-      const response = await agentApi.send(activeSession.id, submitted, recruiter.token);
+      const response = await agentApi.send(activeSession.id, draft, recruiter.token);
       setSession(response.session); setCampaign(response.campaign);
-      setMessage((current) => current.trim() === submitted ? "" : current);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Agent execution failed.");
       const restored = activeSession
@@ -104,10 +104,11 @@ export function RecruitmentAgentPage() {
         : null;
       if (restored) {
         setSession(restored); setCampaign(restored.campaign);
-        if (restored.messages.slice(-2).some((item) => item.role === "user" && item.content === submitted)) {
-          setMessage((current) => current.trim() === submitted ? "" : current);
-        }
       }
+      const accepted = restored?.messages.slice(-2).some(
+        (item) => item.role === "user" && item.content === draft,
+      );
+      if (!accepted) setMessage((current) => current || draft);
     }
     finally { setBusy(false); }
   }
@@ -179,15 +180,11 @@ export function RecruitmentAgentPage() {
       <section className="agent-chat">
         <AgentConversationMenu session={session} token={recruiter.token} onError={setError}
           onOpen={(restored) => { setSession(restored); setCampaign(restored.campaign); setMessage(""); setParams({ session: restored.id }); }}
-          onNew={() => {
-            setSession(null); setCampaign(null); setError(null); setChatOpen(true); setParams({});
-          }} onDeleted={conversationDeleted} />
+          onNew={() => { setSession(null); setCampaign(null); setError(null); setChatOpen(true); setParams({}); }}
+          onDeleted={conversationDeleted} />
         {error && <p className="agent-error" role="alert">{error}</p>}
         {notice && <p className="agent-notice" role="status">{notice}</p>}
         <div className="agent-thread">
-          {session.setup_stage === "ranking" && <p className="agent-notice" role="status">{session.ranking_status === "failed"
-            ? "Ranking stopped after repeated failures. Ask your administrator to check the worker, then use Retry ranking below."
-            : "Ranking approved resumes in the background. This conversation updates when the shortlist is saved."}</p>}
           {session.messages.length === 0 && <article className="agent-message assistant"><span className="agent-avatar" aria-hidden="true">✦</span><div><strong>Recruitment Agent</strong><p>I’m connected to this job and its saved ranking run. What would you like me to do?</p></div></article>}
           {session.messages.map((item) => <AgentThreadMessage key={item.id} message={item} />)}
           {session.setup_stage === "ranked" && session.ranking_run_id && session.job_id &&
@@ -240,6 +237,7 @@ export function RecruitmentAgentPage() {
             </div>}
           </section>}
         </div>
+        <AgentRankingActivity session={session} />
         <AgentPromptBar session={session} busy={busy} onSend={(prompt) => void sendText(prompt)} onDraft={setMessage} />
         <form onSubmit={send} className="agent-composer"><textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Paste a JD or ask about candidates…" rows={3} maxLength={18000} disabled={busy} aria-label="Message Recruitment Agent" onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }

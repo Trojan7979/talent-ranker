@@ -36,6 +36,8 @@ def view(store: AgentStore, row: dict, screening_settings) -> AgentSession:
         {
             **row,
             "ranking_status": ranking["status"] if ranking else None,
+            "ranking_progress": ranking["progress_message"] if ranking else None,
+            "ranking_events": ranking["progress_events"] if ranking else [],
             "messages": store.messages(row["id"]),
             "campaign": campaign_view(store.repository, campaign, screening_settings),
         }

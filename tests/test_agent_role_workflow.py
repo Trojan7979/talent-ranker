@@ -93,6 +93,15 @@ def test_pasted_jd_extracts_criteria_and_requires_ranking_approval():
     assert "explicit approval" in workflow.handle(session, "recruiter", "Rank top 10 candidates")
     assert pipeline.rank_calls == []
 
+    replacement = (
+        "Operations director. The ideal candidate has led regulatory audits. "
+        "Experience with SAP would be useful."
+    )
+    replaced = workflow.handle(session, "recruiter", f"Replace JD: {replacement}")
+    assert "Draft hiring criteria" in replaced
+    assert pipeline.repo.profile["job_description"] == replacement
+    assert session["draft_job_description"] == replacement
+
     revised = workflow.handle(session, "recruiter", "Change must-have skills to Python, SQL")
     assert "Python" in revised and "SQL" in revised
     result = workflow.handle(session, "recruiter", "I approve these criteria; rank top 10 candidates")
@@ -141,7 +150,7 @@ def test_failed_ranking_can_be_retried_from_chat():
     assert session["ranking_status"] == "pending"
 
 
-def test_incomplete_calibration_uses_grounded_rules_fallback(monkeypatch):
+def test_incomplete_calibration_does_not_save_or_approve_rules_fallback(monkeypatch):
     session = {"id": uuid4(), "job_id": "role-1", "setup_stage": "awaiting_jd_approval",
                "draft_job_description": "Senior engineer with Python and SQL experience."}
     pipeline = SetupPipeline()
@@ -162,11 +171,10 @@ def test_incomplete_calibration_uses_grounded_rules_fallback(monkeypatch):
         session, "recruiter", "I approve this JD"
     )
 
-    assert "Draft hiring criteria" in reply
-    assert "Python and SQL experience" in reply
-    assert session["setup_stage"] == "awaiting_criteria_approval"
-    assert pipeline.repo.profile is not None
-    assert pipeline.repo.profile["status"] == "draft"
+    assert "couldn't validate" in reply
+    assert "ranking has not started" in reply
+    assert session["setup_stage"] == "awaiting_jd_approval"
+    assert pipeline.repo.profile is None
     assert len(recorded) == 1
 
 

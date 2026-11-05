@@ -29,12 +29,13 @@ def test_legacy_drive_jobs_do_not_block_signed_in_recruiter_claims():
     if not database_url:
         pytest.skip("set SCREENING_TEST_DATABASE_URL for PostgreSQL integration tests")
     schema = "index_actor_test_" + uuid4().hex
-    migration = Path(__file__).resolve().parents[1] / "db/migrations/006_sharepoint_ingestion_jobs.sql"
+    migrations = Path(__file__).resolve().parents[1] / "db/migrations"
     with psycopg.connect(database_url, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET search_path TO "{schema}"')
-            cur.execute(migration.read_text(encoding="utf-8"))
+            cur.execute((migrations / "006_sharepoint_ingestion_jobs.sql").read_text(encoding="utf-8"))
+            cur.execute((migrations / "022_indexing_outcome_counters.sql").read_text(encoding="utf-8"))
         store = IndexingStore(make_conninfo(database_url, options=f"-c search_path={schema}"))
         try:
             folder = "https://drive.google.com/drive/folders/folder1"

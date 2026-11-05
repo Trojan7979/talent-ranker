@@ -33,6 +33,8 @@ class AgentSession(BaseModel):
     ranking_run_id: UUID | None
     setup_stage: Literal["awaiting_jd", "awaiting_jd_approval", "awaiting_criteria_approval", "ranking", "ranked"]
     ranking_status: Literal["pending", "running", "completed", "failed"] | None = None
+    ranking_progress: str | None = None
+    ranking_events: list[str] = Field(default_factory=list)
     campaign_id: UUID | None
     question_draft: dict | None = None
     question_top_n: int | None = None

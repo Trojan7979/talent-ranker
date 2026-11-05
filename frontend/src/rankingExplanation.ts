@@ -1,30 +1,17 @@
 import type { CandidateScore } from "./api";
 
-type Criterion = NonNullable<CandidateScore["requirement_evidence"]>[number];
+/** New runs store model-written, evidence-grounded bullets in reasoning. */
+export function rankingBullets(candidate: CandidateScore): string[] {
+  const saved = candidate.reasoning?.split(/\r?\n/)
+    .map((line) => line.match(/^\s*[-•]\s+(.+)$/)?.[1]?.trim())
+    .filter((line): line is string => Boolean(line)) ?? [];
+  if (saved.length) return saved.slice(0, 4);
 
-export function criterionLabel(item: Criterion): string {
-  if (typeof item.requirement === "string") return item.requirement;
-  return Object.values(item.requirement).map(String).join(", ");
-}
-
-export function rankingExplanation(candidate: CandidateScore) {
-  const criteria = candidate.requirement_evidence ?? [];
-  const skillItems = criteria.filter((item) =>
-    item.category === "must_have_skills" || item.category === "preferred_skills");
-  const matchedSkills = skillItems.filter((item) => item.status !== "not_evidenced")
-    .map(criterionLabel);
-  const skills = matchedSkills.length
-    ? `${matchedSkills.slice(0, 4).join(", ")}${matchedSkills.length > 4 ? `, +${matchedSkills.length - 4} more` : ""} recorded in the resume.`
-    : "No approved skill match recorded in the saved evidence.";
-
-  const experience = "Experience years are not available yet; add them later from a verified source.";
-
-  const assessed = criteria.filter((item) =>
-    ["must_have_skills", "preferred_skills", "must_have_requirements", "preferred_requirements"].includes(item.category));
-  const supported = assessed.filter((item) => item.status !== "not_evidenced").length;
-  const why = assessed.length
-    ? `Rank #${candidate.rank}: ${supported}/${assessed.length} stated criteria have resume evidence; final order uses BGE semantic relevance.`
-    : `Rank #${candidate.rank}: ordered by BGE semantic relevance; no explicit criteria were recorded.`;
-
-  return { skills, experience, why };
+  // Older runs predate model-written explanations. Only show cited evidence.
+  const cited = candidate.requirement_evidence?.filter((item) =>
+    (item.status === "supported" || item.status === "partial") && item.passage) ?? [];
+  return cited.slice(0, 3).map((item) =>
+    item.status === "partial"
+      ? `Related experience appears in the resume: ${item.passage}`
+      : `Resume evidence: ${item.passage}`);
 }

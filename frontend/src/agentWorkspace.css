@@ -59,6 +59,10 @@
 .agent-context span { font-weight: 750; }
 .agent-context small { overflow: hidden; max-width: 55%; color: #8791a5; text-overflow: ellipsis; white-space: nowrap; }
 .agent-thread { display: grid; align-content: start; gap: 20px; overflow-y: auto; min-height: 440px; max-height: 65vh; padding: 28px; }
+.agent-ranking-activity { padding: 10px 20px; border-top: 1px solid #e3e7ee; background: #f7f9fd; color: #33425d; font-size: 12px; }
+.agent-ranking-activity strong { font-size: 12px; }
+.agent-ranking-activity ol { display: grid; gap: 4px; max-height: 112px; overflow-y: auto; margin: 6px 0 0; padding-left: 20px; }
+.agent-ranking-activity li:last-child { color: #173f9f; font-weight: 700; }
 .agent-message { display: flex; gap: 11px; max-width: 82%; }
 .agent-message > div { min-width: 0; }
 .agent-message strong { color: #263249; font-size: 12px; }
@@ -119,7 +123,6 @@
 .agent-candidate-rank strong { color: #172033; }
 .agent-candidate-card h3 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
 .agent-candidate-card small { color: #62708a; overflow-wrap: anywhere; }
-.agent-candidate-edit { justify-self: start; padding: 0; background: none; color: #2458d3; font-size: 12px; }
 .agent-candidate-card form { display: flex; gap: 7px; }
 .agent-candidate-card form input { min-width: 0; }
 .agent-candidate-explanation { display: grid; gap: 6px; margin: 3px 0; padding-left: 17px; color: #43516b; font-size: 12px; line-height: 1.45; }

@@ -106,11 +106,75 @@ class HostedEmbeddingEncoder:
 
 
 class HostedReranker:
+    max_pair_tokens = 512
+
     def __init__(self, base_url: str, model_name: str, timeout: float = 60.0):
         self.url = base_url.rstrip("/") + "/v1/rerank"
         self.model_name = model_name
         self.timeout = timeout
         self.session = _session()
+
+    @cached_property
+    def tokenizer(self):
+        from transformers import AutoTokenizer
+
+        try:
+            return AutoTokenizer.from_pretrained(self.model_name, local_files_only=True)
+        except OSError:
+            logger.warning("reranker tokenizer is unavailable locally; using a conservative byte budget")
+            return None
+
+    def score_passages(self, query: str, passages: Sequence[str]) -> np.ndarray:
+        return self.score_passages_with_windows(query, passages)[0]
+
+    def score_passages_with_windows(
+        self, query: str, passages: Sequence[str],
+    ) -> tuple[np.ndarray, list[str]]:
+        """Score bounded overlapping windows so a long passage is never silently cut."""
+        if not passages:
+            return np.empty(0), []
+        tokenizer = self.tokenizer
+        windows, owners = [], []
+        if tokenizer is None:
+            room = 480 - len(query.encode("utf-8"))
+            if room < 80:
+                raise ValueError("approved criterion exceeds the reranker query budget")
+            for owner, passage in enumerate(passages):
+                data = passage.encode("utf-8")
+                start = 0
+                while True:
+                    windows.append(data[start:start + room].decode("utf-8", errors="ignore"))
+                    owners.append(owner)
+                    if start + room >= len(data):
+                        break
+                    start += max(1, room - 80)
+        else:
+            query_ids = tokenizer.encode(query, add_special_tokens=False, verbose=False)
+            room = self.max_pair_tokens - len(query_ids) - tokenizer.num_special_tokens_to_add(pair=True)
+            if room < 64:
+                raise ValueError("approved criterion exceeds the reranker query budget")
+            for owner, passage in enumerate(passages):
+                ids = tokenizer.encode(passage, add_special_tokens=False, verbose=False)
+                start = 0
+                while True:
+                    piece = ids[start:start + room]
+                    value = tokenizer.decode(piece, skip_special_tokens=True)
+                    while len(tokenizer.encode(query, value, add_special_tokens=True, verbose=False)) > self.max_pair_tokens:
+                        piece = piece[:-8]
+                        value = tokenizer.decode(piece, skip_special_tokens=True)
+                    windows.append(value)
+                    owners.append(owner)
+                    if start + room >= len(ids):
+                        break
+                    start += max(1, room - 64)
+        logits = self.score(query, windows)
+        best = np.full(len(passages), -np.inf)
+        selected = [""] * len(passages)
+        for owner, window, logit in zip(owners, windows, logits, strict=True):
+            if float(logit) > best[owner]:
+                best[owner] = float(logit)
+                selected[owner] = window
+        return best, selected
 
     def score(self, jd: str, documents: Sequence[str]) -> np.ndarray:
         """Return logits so the scoring policy restores relevance with one sigmoid."""

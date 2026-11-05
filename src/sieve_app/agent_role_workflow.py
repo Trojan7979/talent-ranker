@@ -1,13 +1,15 @@
 """Human-approved role setup before an agent uses a saved ranking run."""
 
 import re
+import logging
 
 from langchain_openai import ChatOpenAI
 
 from talent_ranker.calibration import calibrate_job_description, configured_extractor
 from talent_ranker.llm_priority_extraction import CalibrationError
-from talent_ranker.priority_extraction import RuleBasedPriorityExtractor
 from talent_ranker.schemas import HiringPriorities
+
+logger = logging.getLogger(__name__)
 
 
 def describe_criteria(profile: dict) -> str:
@@ -18,6 +20,7 @@ def describe_criteria(profile: dict) -> str:
         ("Must-have skills", p.must_have_skills),
         ("Preferred requirements", p.preferred_requirements),
         ("Preferred skills", p.preferred_skills),
+        ("Role responsibilities (context, not mandatory qualifications)", p.role_responsibilities),
         ("Locations", p.location.locations),
     ):
         lines.append(f"{label}: {', '.join(values) if values else 'Not specified'}")
@@ -28,7 +31,7 @@ def describe_criteria(profile: dict) -> str:
         f"Maximum notice period: {p.availability.max_notice_period_days if p.availability.max_notice_period_days is not None else 'Not specified'} days",
         f"Target start date: {p.availability.target_start_date or 'Not specified'}",
         f"Compensation: {p.compensation.model_dump(mode='json')}",
-        "Review these carefully. To approve and rank, say: 'I approve these criteria; rank top 10 candidates.' You can also say 'Change must-have skills to Python, FastAPI' or ask to see the JD.",
+        "Review these carefully. To approve and rank, say: 'I approve these criteria; rank top 10 candidates.' You can edit a list, or send 'Replace JD: ...' with the full revised description to regenerate all criteria.",
     ])
     return "\n".join(lines)
 
@@ -67,15 +70,15 @@ class AgentRoleWorkflow:
 
     def _extract_criteria(self, session: dict, jd: str, expected_stage: str) -> str:
         extractor = None
-        metadata = {"method": "rules_fallback"}
+        metadata: dict = {}
         try:
             extractor, metadata = configured_extractor(self.pipeline.settings)
             priorities = calibrate_job_description(jd, extractor=extractor)
-        except CalibrationError:
-            # A model outage or malformed answer must not force the recruiter to
-            # rewrite a valid JD. Keep the fallback grounded in its actual text.
-            priorities = RuleBasedPriorityExtractor(metadata).extract(jd)
-            metadata["method"] = "rules_fallback"
+        except CalibrationError as error:
+            logger.warning("JD criteria extraction failed for session %s: %s", session["id"], error)
+            return ("I couldn't validate the hiring criteria from this JD, so no criteria "
+                    "were saved and ranking has not started. Please retry the JD or ask an "
+                    "administrator to check the criteria extraction service.")
         finally:
             llm = getattr(extractor, "llm", extractor)
             usage = getattr(llm, "last_usage", None)
@@ -84,7 +87,8 @@ class AgentRoleWorkflow:
                 record_usage(session["id"], "qubrid", self.pipeline.settings.calibration_model,
                              "jd_calibration", usage)
         if not (priorities.must_have_skills or priorities.preferred_skills
-                or priorities.must_have_requirements or priorities.preferred_requirements):
+                or priorities.must_have_requirements or priorities.preferred_requirements
+                or priorities.role_responsibilities):
             return ("I could not identify hiring criteria in this description. "
                     "Please add the role's requirements or responsibilities and try again.")
         if session["job_id"] is None:
@@ -152,6 +156,13 @@ class AgentRoleWorkflow:
                 return describe_criteria(profile)
             if lower in {"show jd", "show the jd", "show job description"}:
                 return f"Current JD:\n\n{profile['job_description']}"
+            if lower.startswith("replace jd:"):
+                replacement = value.partition(":")[2].strip()
+                if len(replacement) < 20:
+                    return "Paste the complete revised description after 'Replace JD:'."
+                if profile["status"] != "draft":
+                    return "These criteria are already approved. Start a new role conversation to replace the JD."
+                return self._extract_criteria(session, replacement, stage)
             change = re.fullmatch(r"change (must-have skills|preferred skills|must-have requirements|preferred requirements) to (.+)", value, re.IGNORECASE | re.DOTALL)
             if change:
                 if profile["status"] != "draft":
@@ -169,7 +180,7 @@ class AgentRoleWorkflow:
             if not approval:
                 if profile["status"] == "approved":
                     return "The criteria were approved, but ranking has not completed. Say 'I approve these criteria; rank top 10 candidates' to retry."
-                return "I need explicit approval before ranking. Review the criteria, then say 'I approve these criteria; rank top 10 candidates.' To edit a list, say 'Change must-have skills to Python, FastAPI'."
+                return "I need explicit approval before ranking. Review the criteria, replace the JD, or edit a criterion. Then say 'I approve these criteria; rank top 10 candidates.'"
             top_k = int(approval.group(1))
             if not 1 <= top_k <= 1000:
                 return "Choose between 1 and 1000 candidates for the shortlist."

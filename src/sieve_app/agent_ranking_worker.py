@@ -9,7 +9,9 @@ from candidate_screening.repository import PostgresRepository as ScreeningReposi
 from talent_ranker.access import RecruiterScope
 from talent_ranker.config import SETTINGS
 from talent_ranker.pipeline import RankingPipeline
+from talent_ranker.ranking_explanations import RankingExplanationGenerator
 
+from .agent_config import AgentSettings
 from .agent_store import AgentStore
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,8 @@ class AgentRankingWorker:
                 frozenset({session["job_id"]}),
             )
             run_id, results = self.pipeline.rank(
-                profile["job_id"], profile, job["top_k"], scope
+                profile["job_id"], profile, job["top_k"], scope,
+                progress=lambda message: self.store.update_ranking_progress(job, message),
             )
             self.store.finish_ranking(job, run_id, results)
             logger.info("Ranking completed: %s ranking results saved.", len(results))
@@ -70,8 +73,14 @@ def main() -> None:
         "Ranking worker configuration: poll_interval=%.1fs reranker=%s",
         args.interval, SETTINGS.hosted_reranker_model,
     )
+    agent_settings = AgentSettings()
+    agent_settings.require_ready()
+    pipeline = RankingPipeline(SETTINGS, explanation_generator=RankingExplanationGenerator(
+        agent_settings.base_url.rstrip("/") + "/chat/completions",
+        agent_settings.api_key.get_secret_value(), agent_settings.model,
+        agent_settings.ranking_explanation_timeout_seconds,
+    ))
     repo = ScreeningRepository(SETTINGS.database_url)
-    pipeline = RankingPipeline(SETTINGS)
     try:
         worker = AgentRankingWorker(AgentStore(repo), pipeline)
         stop = Event()

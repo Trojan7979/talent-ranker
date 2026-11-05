@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,7 +11,8 @@ from .schemas import HiringPriorities
 
 FieldName = Literal[
     "must_have_skills", "preferred_skills", "must_have_requirements",
-    "preferred_requirements", "minimum_years_experience", "seniority",
+    "preferred_requirements", "role_responsibilities",
+    "minimum_years_experience", "seniority",
     "location", "remote_policy", "max_notice_period_days", "target_start_date",
     "compensation_currency", "compensation_minimum", "compensation_maximum",
     "compensation_period",
@@ -37,26 +38,11 @@ def _normalized(text: str) -> str:
 
 
 class GroundedCriteriaValidator:
-    """Fail closed when model facts are ungrounded, ambiguous, or conflicting."""
-
-    _must_cues = re.compile(
-        r"\b(?:must|required|mandatory|essential|minimum|requirements?|qualifications?|"
-        r"what you (?:bring|need)|we (?:need|require|seek)|looking for)\b",
-        re.IGNORECASE,
-    )
-    _preferred_cues = re.compile(
-        r"\b(?:preferred|nice to have|desirable|a plus|bonus|optional)\b",
-        re.IGNORECASE,
-    )
-    _text_fields = {
-        "must_have_skills", "preferred_skills", "must_have_requirements",
-        "preferred_requirements", "seniority", "location", "remote_policy",
-        "compensation_currency",
-    }
-    _criteria_fields = {
+    """Check model output shape, source quotes, and contradictory field values."""
+    _criteria_fields: ClassVar[frozenset[str]] = frozenset({
         "must_have_skills", "preferred_skills",
         "must_have_requirements", "preferred_requirements",
-    }
+    })
 
     def validate(self, raw: object, job_description: str) -> tuple[HiringPriorities, list[dict]]:
         facts = self._remove_redundant_skills(self._deduplicate([
@@ -75,39 +61,16 @@ class GroundedCriteriaValidator:
             raise ValueError("criterion or supporting quote is too long")
         if _normalized(fact.quote) not in _normalized(job_description):
             raise ValueError("model fact has no exact JD quote")
-        if fact.field in self._text_fields and (
-            _normalized(str(fact.value)) not in _normalized(fact.quote)
-        ):
-            raise ValueError("model value is not present in supporting quote")
-        if fact.field.startswith("must_have_"):
-            self._require_active_cue(
-                fact, job_description, self._must_cues, self._preferred_cues, "requirement"
+        if fact.field.endswith("_skills") or fact.field == "location":
+            if _normalized(str(fact.value)) not in _normalized(fact.quote):
+                raise ValueError("model value is not present in supporting quote")
+        if fact.field == "minimum_years_experience":
+            ranges = re.findall(
+                r"(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*\d+(?:\.\d+)?\s*years?",
+                fact.quote, re.IGNORECASE,
             )
-        if fact.field.startswith("preferred_"):
-            self._require_active_cue(
-                fact, job_description, self._preferred_cues, self._must_cues, "optional"
-            )
-
-    @staticmethod
-    def _require_active_cue(
-        fact: ExtractedFact, job_description: str, expected: re.Pattern,
-        opposing: re.Pattern, label: str,
-    ) -> None:
-        quote = _normalized(fact.quote)
-        jd = _normalized(job_description)
-        quote_at = jd.rfind(quote)
-        context = jd[:quote_at + len(quote)]
-        context = re.sub(
-            r"\b(?:preferred|desirable|optional|nice to have)\s+"
-            r"(?:requirements?|qualifications?)\b",
-            "preferred",
-            context,
-            flags=re.IGNORECASE,
-        )
-        expected_at = max((match.start() for match in expected.finditer(context)), default=-1)
-        opposing_at = max((match.start() for match in opposing.finditer(context)), default=-1)
-        if expected_at < opposing_at or expected_at < 0:
-            raise ValueError(f"criterion lacks nearby {label} language")
+            if ranges and float(fact.value) != min(map(float, ranges)):
+                raise ValueError("experience range must use its lower bound")
 
     @staticmethod
     def _group_alternative_skills(fact: ExtractedFact) -> ExtractedFact:
@@ -149,9 +112,10 @@ class GroundedCriteriaValidator:
         values: dict = {
             "must_have_skills": [], "preferred_skills": [],
             "must_have_requirements": [], "preferred_requirements": [],
+            "role_responsibilities": [],
             "location": {"locations": []}, "availability": {}, "compensation": {},
         }
-        repeatable = self._criteria_fields | {"location"}
+        repeatable = self._criteria_fields | {"location", "role_responsibilities"}
         scalar_fields: set[str] = set()
         classified: dict[tuple[str, str], str] = {}
         for fact in facts:
@@ -162,7 +126,9 @@ class GroundedCriteriaValidator:
                 scalar_fields.add(field)
             if isinstance(value, str) and not value.strip():
                 raise ValueError("empty extracted value")
-            if field in self._criteria_fields:
+            if field == "role_responsibilities":
+                values[field].append(str(value).strip())
+            elif field in self._criteria_fields:
                 kind = "skills" if field.endswith("skills") else "requirements"
                 key = kind, _normalized(str(value))
                 importance = "must" if field.startswith("must_have") else "preferred"

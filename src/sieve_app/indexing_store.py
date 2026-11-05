@@ -11,9 +11,10 @@ from psycopg_pool import ConnectionPool
 
 from .drive_oauth_state import DriveOAuthStateMixin
 from .identity_approval import IdentityApprovalMixin
+from .indexing_progress import IndexingProgressMixin
 
 
-class IndexingStore(DriveOAuthStateMixin, IdentityApprovalMixin):
+class IndexingStore(DriveOAuthStateMixin, IdentityApprovalMixin, IndexingProgressMixin):
     def __init__(self, database_url: str):
         self.pool = ConnectionPool(
             database_url, min_size=1, max_size=4, kwargs={"row_factory": dict_row}, open=True
@@ -27,7 +28,8 @@ class IndexingStore(DriveOAuthStateMixin, IdentityApprovalMixin):
         with self.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """SELECT coalesce(nullif(metadata->>'client_source_uri',''),source_uri)
-                            AS source_uri, metadata->>'source_etag' AS source_etag
+                            AS source_uri, metadata->>'source_etag' AS source_etag,
+                            metadata->>'source_md5_checksum' AS source_md5_checksum
                    FROM candidates WHERE candidate_id=%s AND deleted_at IS NULL""",
                 (candidate_id,),
             )
@@ -127,9 +129,11 @@ class IndexingStore(DriveOAuthStateMixin, IdentityApprovalMixin):
         with self.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """UPDATE sharepoint_ingestion_jobs SET entries=%s,status='awaiting_review',
-                      discovered=%s,leased_until=NULL,updated_at=now()
+                      discovered=%s,analyzed=%s,matched_existing=%s,
+                      leased_until=NULL,updated_at=now()
                    WHERE id=%s AND phase='analyze' AND status='running' AND attempts=%s""",
-                (Jsonb(drafts), len(drafts), job_id, attempt),
+                (Jsonb(drafts), len(drafts), len(drafts),
+                 sum(item.get("suggestion") == "existing" for item in drafts), job_id, attempt),
             )
             if cur.rowcount != 1:
                 raise RuntimeError("analysis lease was lost")
@@ -195,25 +199,15 @@ class IndexingStore(DriveOAuthStateMixin, IdentityApprovalMixin):
                 return None
             cur.execute(
                 """UPDATE sharepoint_ingestion_jobs SET status='running', attempts=attempts+1,
-                      discovered=0,indexed=0,skipped=0,failures='[]'::jsonb,
+                      discovered=CASE WHEN phase='analyze' THEN 0 ELSE discovered END,
+                      analyzed=CASE WHEN phase='analyze' THEN 0 ELSE analyzed END,
+                      matched_existing=CASE WHEN phase='analyze' THEN 0 ELSE matched_existing END,
+                      indexed=0,embedded=0,unchanged=0,skipped=0,failures='[]'::jsonb,
                       leased_until=now()+interval '30 minutes',updated_at=now()
                    WHERE id=%s RETURNING *""",
                 (row["id"],),
             )
             return cur.fetchone()
-
-    def record_result(self, job_id: UUID, attempt: int, failure: str | None) -> None:
-        with self.pool.connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                """UPDATE sharepoint_ingestion_jobs SET
-                      indexed=indexed+%s,
-                      failures=failures || %s::jsonb,
-                      leased_until=now()+interval '30 minutes',updated_at=now()
-                   WHERE id=%s AND status='running' AND attempts=%s""",
-                (int(failure is None), Jsonb([failure] if failure else []), job_id, attempt),
-            )
-            if cur.rowcount != 1:
-                raise RuntimeError("indexing lease was lost")
 
     def finish(self, job_id: UUID, attempt: int, discovered: int, skipped: int) -> None:
         with self.pool.connection() as conn, conn.cursor() as cur:

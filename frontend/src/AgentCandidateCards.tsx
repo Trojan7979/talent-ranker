@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getSavedRun } from "./api";
 import type { SavedRunPage } from "./api";
@@ -7,7 +7,7 @@ import type { ContactPreview } from "./batchApi";
 import { BatchPreparation } from "./BatchPreparation";
 import { ResumeSourceCard } from "./ResumeSourceCard";
 import { ExternalEvidenceCard } from "./ExternalEvidenceCard";
-import { rankingExplanation } from "./rankingExplanation";
+import { rankingBullets } from "./rankingExplanation";
 
 type Props = { jobId: string; runId: string; token: string };
 
@@ -17,8 +17,6 @@ export function AgentCandidateCards({ jobId, runId, token }: Props) {
   const [namesLoaded, setNamesLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [preparing, setPreparing] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [nameDraft, setNameDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -70,22 +68,6 @@ export function AgentCandidateCards({ jobId, runId, token }: Props) {
     });
   }
 
-  async function saveName(event: FormEvent, candidateId: string) {
-    event.preventDefault();
-    if (!nameDraft.trim()) return;
-    try {
-      const saved = await batchApi.setName(candidateId, nameDraft.trim(), token);
-      setNames((current) => ({ ...current, [candidateId]: {
-        ...current[candidateId], candidate_id: candidateId, display_name: saved.display_name,
-        name_source: "recruiter_verified", email: current[candidateId]?.email ?? null,
-        contactable: current[candidateId]?.contactable ?? false,
-      } }));
-      setEditing(null); setError(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save candidate name.");
-    }
-  }
-
   return <section className="agent-candidates" aria-label="Saved ranked candidates">
     <header className="agent-candidates-header">
       <div><small>SAVED SHORTLIST</small><h2>Top candidates</h2>
@@ -108,7 +90,7 @@ export function AgentCandidateCards({ jobId, runId, token }: Props) {
       </div>
       <div className="agent-candidates-grid">{run.items.map((candidate) => {
         const identity = names[candidate.candidate_id];
-        const explanation = rankingExplanation(candidate);
+        const bullets = rankingBullets(candidate);
         return <article key={candidate.candidate_id}
           className={`agent-candidate-card ${selected.has(candidate.candidate_id) ? "selected" : ""}`}>
           <label className="agent-candidate-select"><input type="checkbox"
@@ -120,19 +102,9 @@ export function AgentCandidateCards({ jobId, runId, token }: Props) {
           <h3>{identity?.display_name || (namesLoaded ? "Name needs review" : "Loading name…")}</h3>
           <small>Record ID: {candidate.candidate_id}</small>
           {identity?.name_source === "legacy_resume_header" && <small>Extracted from resume · verify before outreach</small>}
-          {identity && <button type="button" className="agent-candidate-edit" onClick={() => {
-            setEditing(candidate.candidate_id); setNameDraft(identity.display_name ?? "");
-          }}>{identity.display_name ? "Correct name" : "Add name"}</button>}
-          {editing === candidate.candidate_id && <form onSubmit={(event) => saveName(event, candidate.candidate_id)}>
-            <input aria-label={`Verified name for ${candidate.candidate_id}`} value={nameDraft}
-              onChange={(event) => setNameDraft(event.target.value)} maxLength={80} required />
-            <button type="submit">Save</button>
-          </form>}
-          <ul className="agent-candidate-explanation">
-            <li><strong>Skills:</strong> {explanation.skills}</li>
-            <li><strong>Experience:</strong> {explanation.experience}</li>
-            <li><strong>Why ranked:</strong> {explanation.why}</li>
-          </ul>
+          {bullets.length > 0 && <ul className="agent-candidate-explanation">
+            {bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
+          </ul>}
           <div className="agent-candidate-links">
             <ResumeSourceCard candidateId={candidate.candidate_id} token={token} />
             <ExternalEvidenceCard candidateId={candidate.candidate_id} token={token} />

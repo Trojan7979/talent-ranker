@@ -75,8 +75,8 @@ class CandidateChunksRepositoryMixin:
             return {}
         with self.conn.cursor() as cur:
             cur.execute(
-                """SELECT rc.candidate_id, rc.ordinal, rc.section, rc.content,
-                          c.source_sha256
+                """SELECT DISTINCT rc.candidate_id, rc.ordinal, rc.section, rc.content,
+                          c.source_sha256, rc.embedding_v2::text
                    FROM resume_chunks rc
                    JOIN candidates c ON c.candidate_id = rc.candidate_id
                    JOIN candidate_source_grants g ON g.candidate_id=c.candidate_id
@@ -88,13 +88,14 @@ class CandidateChunksRepositoryMixin:
             )
             rows = cur.fetchall()
         chunks: dict[str, list[dict]] = {candidate_id: [] for candidate_id in candidate_ids}
-        for candidate_id, ordinal, section, content, source_hash in rows:
+        for candidate_id, ordinal, section, content, source_hash, embedding in rows:
             chunks[candidate_id].append(
                 {
                     "ordinal": ordinal,
                     "section": section,
                     "content": content,
                     "source_sha256": source_hash,
+                    "embedding": embedding,
                 }
             )
         return chunks

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getSavedRun } from "./api";
 import type { CandidateScore, SavedRunPage } from "./api";
@@ -8,6 +8,7 @@ import type { ContactPreview } from "./batchApi";
 import { useRecruiterSession } from "./RecruiterLayout";
 import { ResumeSourceCard } from "./ResumeSourceCard";
 import { ExternalEvidenceCard } from "./ExternalEvidenceCard";
+import { rankingBullets } from "./rankingExplanation";
 
 export function ShortlistPage() {
   const { jobId, runId } = useParams();
@@ -29,9 +30,6 @@ export function ShortlistPage() {
   const [identityError, setIdentityError] = useState<string | null>(null);
   const [identityLoaded, setIdentityLoaded] = useState(false);
   const [identityRequest, setIdentityRequest] = useState(0);
-  const [editingNameId, setEditingNameId] = useState<string | null>(null);
-  const [nameDraft, setNameDraft] = useState("");
-  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (!recruiterSession.token) return;
@@ -102,25 +100,6 @@ export function ShortlistPage() {
     });
   }
 
-  async function saveName(event: FormEvent, candidateId: string) {
-    event.preventDefault();
-    if (!activeToken || !nameDraft.trim()) return;
-    setSavingName(true);
-    try {
-      const saved = await batchApi.setName(candidateId, nameDraft.trim(), activeToken);
-      setIdentities((previous) => ({ ...previous, [candidateId]: {
-        ...previous[candidateId], candidate_id: candidateId, display_name: saved.display_name,
-        name_source: "recruiter_verified",
-        email: previous[candidateId]?.email ?? null,
-        contactable: previous[candidateId]?.contactable ?? false,
-      } }));
-      setEditingNameId(null);
-      setIdentityError(null);
-    } catch (cause) {
-      setIdentityError(cause instanceof Error ? cause.message : "Could not save candidate name.");
-    } finally { setSavingName(false); }
-  }
-
   return (
     <main className="shortlist-workspace">
       <header className="shortlist-header">
@@ -178,7 +157,7 @@ export function ShortlistPage() {
         </div>
       )}
       <section className="shortlist-grid" aria-label="Ranked candidates">
-        {candidates.map((candidate) => (
+        {candidates.map((candidate) => { const bullets = rankingBullets(candidate); return (
           <article key={candidate.candidate_id} className={`result-card ${selected.has(candidate.candidate_id) ? "selected" : ""}`}>
             <label className="candidate-select">
               <input type="checkbox" checked={selected.has(candidate.candidate_id)} onChange={() => toggle(candidate.candidate_id)} />
@@ -190,25 +169,15 @@ export function ShortlistPage() {
               <small className="candidate-record-id">Record ID: {candidate.candidate_id}</small>
               {identities[candidate.candidate_id]?.name_source === "legacy_resume_header" &&
                 <small className="candidate-record-id">Extracted from resume · verify before outreach</small>}
-              {identityLoaded && <button type="button" className="name-review-button" onClick={() => {
-                setEditingNameId(candidate.candidate_id);
-                setNameDraft(identities[candidate.candidate_id]?.display_name ?? "");
-              }}>{identities[candidate.candidate_id]?.display_name ? "Correct name" : "Add verified name"}</button>}
             </div>
             <strong title="Relative ranking index, not a probability of job fit">Ranking index {Math.round(candidate.score * 100)}/100</strong>
-            {editingNameId === candidate.candidate_id && <form className="name-review-form"
-              onSubmit={(event) => saveName(event, candidate.candidate_id)}>
-              <label>Verified name from the resume
-                <input value={nameDraft} maxLength={80} onChange={(event) => setNameDraft(event.target.value)} required />
-              </label>
-              <button type="submit" disabled={savingName || nameDraft.trim().length < 2}>Save name</button>
-              <button type="button" className="secondary-button" onClick={() => setEditingNameId(null)}>Cancel</button>
-            </form>}
-            <p>{candidate.reasoning}</p>
+            {bullets.length > 0 && <ul className="agent-candidate-explanation">
+              {bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
+            </ul>}
             <ResumeSourceCard candidateId={candidate.candidate_id} token={activeToken} />
             <ExternalEvidenceCard candidateId={candidate.candidate_id} token={activeToken} />
           </article>
-        ))}
+        ); })}
       </section>
       {preparing && run?.job_profile_version_id && jobId && runId &&
         <BatchPreparation jobId={jobId} runId={runId} profileId={run.job_profile_version_id}
